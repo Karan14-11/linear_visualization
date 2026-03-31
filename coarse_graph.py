@@ -11,10 +11,8 @@ import networkx as nx
 import community
 import matplotlib.pyplot as plt
 import pandas as pd
-import math
 import itertools
 import json
-import numpy as np
 from networkx.readwrite import json_graph
 
 def heatmap_data_generator(partition, link_df_sym):
@@ -211,32 +209,32 @@ def link_data_symmetry(induced_coarse_graph):
     df = pd.DataFrame(dict)
     return df
 
-# def adding_centrality_measures_to_data(new_data):
-#     betw= nx.betweenness_centrality(G)
-#     clo= nx.closeness_centrality(G)
-#     eig = nx.eigenvector_centrality(G)
+def adding_centrality_measures_to_data(new_data):
+    betw= nx.betweenness_centrality(G)
+    clo= nx.closeness_centrality(G)
+    eig = nx.eigenvector_centrality(G)
     
-#     betw_df = pd.DataFrame(list(betw.items()))
-#     clo_df = pd.DataFrame(list(clo.items()))
-#     eig_df = pd.DataFrame(list(eig.items()))
+    betw_df = pd.DataFrame(list(betw.items()))
+    clo_df = pd.DataFrame(list(clo.items()))
+    eig_df = pd.DataFrame(list(eig.items()))
     
-#     betw_df.columns = ['node', 'betwness']
-#     clo_df.columns = ['node', 'closeness']
-#     eig_df.columns = ['node', 'eign']
+    betw_df.columns = ['node', 'betwness']
+    clo_df.columns = ['node', 'closeness']
+    eig_df.columns = ['node', 'eign']
     
-#     new_data = pd.merge(betw_df, new_data, on='node')
-#     new_data = pd.merge(clo_df, new_data, on='node')
-#     new_data = pd.merge(eig_df, new_data, on='node')
+    new_data = pd.merge(betw_df, new_data, on='node')
+    new_data = pd.merge(clo_df, new_data, on='node')
+    new_data = pd.merge(eig_df, new_data, on='node')
     
-#     new_data = ordering_nodes(new_data)
+    new_data = ordering_nodes(new_data)
     
-#     #sorting the data and node index based on node id
-#     #new_data["node"] = pd.to_numeric(new_data["node"])
-#     #new_data= new_data.sort_values(by = 'node')
-#     #new_data = new_data.reset_index(drop=True)
+    #sorting the data and node index based on node id
+    #new_data["node"] = pd.to_numeric(new_data["node"])
+    #new_data= new_data.sort_values(by = 'node')
+    #new_data = new_data.reset_index(drop=True)
     
     
-#     return new_data
+    return new_data
     
 
 def adding_centrality_measures_to_data(new_data):
@@ -327,7 +325,7 @@ def dictAfterOutlierRemovalFromDifferentCentralitities(data):
 
   
 #read graph data
-G = nx.read_edgelist("lastfm.csv", delimiter=",", nodetype=int)
+G = nx.read_edgelist("coauthor_cs_edges.csv", delimiter=",", nodetype=int)
 # G =  nx.read_edgelist("facebook_combined.txt")
  
    

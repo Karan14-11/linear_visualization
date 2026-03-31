@@ -7,6 +7,26 @@ let heighest_density_data
 let heighest_degree_data
 let coarse_graph
 let number_of_community_connections_data
+let nodeFeatureLookup = {}
+
+// CS field class names mapping
+const CS_FIELD_NAMES = {
+  0: "Artificial Intelligence",
+  1: "Comp. Linguistics",
+  2: "Comp. Vision",
+  3: "Databases",
+  4: "Data Mining",
+  5: "Graphics",
+  6: "HCI",
+  7: "Info. Retrieval",
+  8: "Machine Learning",
+  9: "Multimedia",
+  10: "Networking",
+  11: "NLP",
+  12: "Operating Systems",
+  13: "Programming Lang.",
+  14: "Security"
+}
 
 //for community size barchart
 function showdata_count(data){
@@ -181,6 +201,13 @@ function showdata_spiral_community_chart(data){
 
       coarse_graph = data[9]
 
+    // Build node feature lookup from coauthor_cs_nodes.csv (data[12])
+    if (data[12]) {
+      data[12].forEach(function(d) {
+        nodeFeatureLookup[+d.node_id] = +d.cs_field_class;
+      });
+      console.log("Node feature lookup built with " + Object.keys(nodeFeatureLookup).length + " entries");
+    }
 
   //coarse_graph_data
     coarse_graph_data = data[1]
@@ -204,6 +231,15 @@ function showdata_spiral_community_chart(data){
   //transform data from strings to integers
     data = transform_data(data[0])
     console.log(data)
+
+    // Attach cs_field feature to each node data point
+    data.forEach(function(d) {
+      if (nodeFeatureLookup.hasOwnProperty(d.node)) {
+        d.cs_field = nodeFeatureLookup[d.node];
+      } else {
+        d.cs_field = -1; // unknown
+      }
+    });
 
   //calculate final x and y position for each point
   //data= computing_spiral_positions_barchart_inspired((center_positions_spiral, data, optimal_no_of_nodes, height, width))
@@ -323,5 +359,6 @@ Promise.all([
   d3.csv(DATADIR+"commuity_h_degree.csv"),
   d3.json(DATADIR+"coarse_graph_data.json"),
   d3.json(DATADIR+"community_connection_list.json"),
-  d3.csv(DATADIR+"commuity_number_of_connections.csv")
+  d3.csv(DATADIR+"commuity_number_of_connections.csv"),
+  d3.csv("coauthor_cs_nodes.csv")
   ]).then(showdata_spiral_community_chart)

@@ -654,8 +654,11 @@ function colorNodesByEign(){
     d3.select("#node_textbox").select("svg").remove()
 
   // append the svg object to the body of the page
+    var csFieldClass = nodeFeatureLookup.hasOwnProperty(+find_node_id) ? nodeFeatureLookup[+find_node_id] : -1;
+    var csFieldName = CS_FIELD_NAMES.hasOwnProperty(csFieldClass) ? CS_FIELD_NAMES[csFieldClass] : "Unknown";
     var svg = d3.select("#node_textbox")
       .html("<br/><b>NODE DATA</b><br/><b>Community: </b>"+ node_community +"<br/>" + 
+      "<b>CS Field:</b> "+ csFieldName + "<br/>" +
       "<b>Degree:</b> "+ node_centrality + "<br/>" +
        "<b>Betweeness:</b> " + node_betweness + "<br/>" +
        "<b>Closeness:</b> " + node_closeness + "<br/>" +
@@ -712,6 +715,9 @@ function colorNodesByEign(){
     document.getElementById('textInputbet').value= 0
     document.getElementById('Betweenness').value= 0
 
+    //reset community filter
+    document.getElementById('textInputCommunityFilter').value = ''
+
     //clearing the highlight window
     d3.select("#node_textbox").html("")
     d3.select("#community_textbox").html("")
@@ -727,3 +733,116 @@ function colorNodesByEign(){
     show_table_data(global_data)
 
   }
+
+  // Community filter: show only selected communities
+  function applyCommunityFilter() {
+    var filterInput = document.getElementById('textInputCommunityFilter').value.trim();
+    if (!filterInput) return;
+
+    // Parse comma-separated community IDs
+    var selectedCommunities = filterInput.split(',').map(function(s) { return +s.trim(); }).filter(function(n) { return !isNaN(n); });
+    if (selectedCommunities.length === 0) return;
+
+    console.log("Filtering to communities:", selectedCommunities);
+
+    let height = 1200;
+    let width = 1200;
+
+    // Filter node data to only include selected communities
+    var filteredData = global_data_unchanged.filter(function(d) {
+      return selectedCommunities.includes(d.community);
+    });
+
+    if (filteredData.length === 0) {
+      alert("No nodes found in the specified communities.");
+      return;
+    }
+
+    // Filter community ranking data to only include selected communities
+    var filtered_community_size = community_size_data.filter(function(d) {
+      return selectedCommunities.includes(d.community);
+    });
+
+    // Sort by current ranking
+    let positions_spiral;
+    if (flag_community_size == 1)
+      positions_spiral = filtered_community_size;
+    else if (flag_community_degree == 1) {
+      positions_spiral = heighest_degree_data.filter(function(d) {
+        return selectedCommunities.includes(d.community);
+      });
+    } else if (flag_community_density == 1) {
+      positions_spiral = heighest_density_data.filter(function(d) {
+        return selectedCommunities.includes(d.community);
+      });
+    } else if (flag_community_connections == 1) {
+      positions_spiral = number_of_community_connections_data.filter(function(d) {
+        return selectedCommunities.includes(d.community);
+      });
+    } else {
+      positions_spiral = filtered_community_size;
+    }
+
+    // Sort nodes within each community by degree
+    let prepare_data = [];
+    selectedCommunities.forEach(function(comm) {
+      var comm_data = filteredData.filter(function(d) { return d.community == comm; });
+      comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
+      prepare_data.push.apply(prepare_data, comm_data);
+    });
+
+    // Recompute positions
+    prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+    global_data = prepare_data;
+
+    d3.select("#chart").selectAll("svg").remove();
+
+    let svg = d3.select("#chart");
+    initializeSpiralChart(svg, height, width);
+    draw_spiral_community();
+
+    // Update table
+    table.selectAll("tr").remove();
+    show_table_data(global_data);
+  }
+
+  // Reset community filter
+  function resetCommunityFilter() {
+    document.getElementById('textInputCommunityFilter').value = '';
+    global_data = global_data_unchanged;
+    
+    let height = 1200;
+    let width = 1200;
+
+    let positions_spiral;
+    if (flag_community_size == 1)
+      positions_spiral = community_size_data;
+    else if (flag_community_degree == 1)
+      positions_spiral = heighest_degree_data;
+    else if (flag_community_density == 1)
+      positions_spiral = heighest_density_data;
+    else if (flag_community_connections == 1)
+      positions_spiral = number_of_community_connections_data;
+    else
+      positions_spiral = community_size_data;
+
+    let prepare_data = [];
+    let unique_communities = new Set(global_data_unchanged.map(function(d) { return d.community; }));
+    unique_communities.forEach(function(entry) {
+      var comm_data = global_data_unchanged.filter(function(d) { return d.community == entry; });
+      comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
+      prepare_data.push.apply(prepare_data, comm_data);
+    });
+
+    prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+    global_data = prepare_data;
+
+    d3.select("#chart").selectAll("svg").remove();
+    let svg = d3.select("#chart");
+    initializeSpiralChart(svg, height, width);
+    draw_spiral_community();
+
+    table.selectAll("tr").remove();
+    show_table_data(global_data);
+  }
+

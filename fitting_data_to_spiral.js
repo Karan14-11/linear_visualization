@@ -63,12 +63,16 @@ function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, ei
 
   var inter_community_connections =adjacent_nodes.length - count;
 
+  // Get the CS field for active node
+  var csFieldClass = nodeFeatureLookup.hasOwnProperty(activeNode) ? nodeFeatureLookup[activeNode] : -1;
+  var csFieldName = CS_FIELD_NAMES.hasOwnProperty(csFieldClass) ? CS_FIELD_NAMES[csFieldClass] : "Unknown";
+
   d3.select("#node_textbox").select("svg").remove()
   //d3.select("#node_textbox").html("")
 
   // append the svg object to the body of the page
   var svg = d3.select("#node_textbox")
-      .html("<b>Node of interest: </b>"+ activeNode +"<br/>" +"<b>Degree: </b>"+ deg +"<br/>" +"<b>Closeness: </b>"+ clo +"<br/>" + "<b>Betweenness: </b>"+ bet +"<br/>" +"<b>Eigen: </b>"+ eig +"<br/>" + "<br/>"
+      .html("<b>Node of interest: </b>"+ activeNode +"<br/>" +"<b>CS Field: </b>"+ csFieldName +"<br/>" +"<b>Degree: </b>"+ deg +"<br/>" +"<b>Closeness: </b>"+ clo +"<br/>" + "<b>Betweenness: </b>"+ bet +"<br/>" +"<b>Eigen: </b>"+ eig +"<br/>" + "<br/>"
        + "<b>Total edges:</b> " + adjacent_nodes.length + "<br/>" +
        "<b>Intra-community node-to-node edges:</b> " + count + "<br/>" +
        "<b>Inter-community node-to-node edges:</b> " + inter_community_connections + "<br/>" +
@@ -609,6 +613,7 @@ function transform_data(data){
     eign : parseFloat(d.eign),
     closeness : parseFloat(d.closeness),
     betwness: parseFloat(d.betwness),
+    cs_field: d.cs_field !== undefined ? +d.cs_field : (nodeFeatureLookup.hasOwnProperty(+d.node) ? nodeFeatureLookup[+d.node] : -1),
     x : +d.x,
     y: +d.y
   }))
@@ -1041,7 +1046,9 @@ console.log(global_data)
 
                                       }
                                       else{
-                                        div.html("<b>Node:</b> "+ d.node +"<br/>" +"<b>Community:</b> " +d.community+ "<br/>"+"<b>Degree:</b> "+ d.centrality )
+                                        var csClass = nodeFeatureLookup.hasOwnProperty(d.node) ? nodeFeatureLookup[d.node] : -1;
+                                        var csName = CS_FIELD_NAMES.hasOwnProperty(csClass) ? CS_FIELD_NAMES[csClass] : "Unknown";
+                                        div.html("<b>Node:</b> "+ d.node +"<br/>" +"<b>Community:</b> " +d.community+ "<br/>"+"<b>Degree:</b> "+ d.centrality +"<br/>"+"<b>CS Field:</b> "+ csName )
                                         .style("left", (event.pageX) + "px")
                                         .style("top", (event.pageY - 28) + "px")
                                         .style("text-align", "left");
