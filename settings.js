@@ -630,7 +630,7 @@ function colorNodesByEign(){
 
       d3.select("#community_histogram").select("svg").remove()
     d3.select("#node_textbox").select("svg").remove()
-    d3.select("#community_piechart").html("")
+    d3.select("#community_barchart").html("")
 
   // append the svg object to the body of the page
     var csFieldClass = nodeFeatureLookup.hasOwnProperty(+find_node_id) ? nodeFeatureLookup[+find_node_id] : -1;
@@ -713,7 +713,7 @@ function colorNodesByEign(){
     d3.select("#node_textbox").html("")
     d3.select("#community_textbox").html("")
     d3.select("#community_histogram").select("svg").remove()
-    d3.select("#community_piechart").html("")
+    d3.select("#community_barchart").html("")
     d3.select("#community_spiral").select("svg").remove()
 
 

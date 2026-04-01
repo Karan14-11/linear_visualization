@@ -104,8 +104,8 @@ function draw_textbox_community_connections(){
   d3.select("#community_textbox").select("svg").remove()
   d3.select("#node_textbox").html("")
   d3.select("#community_connection_textbox").html("")
-  d3.select("#community_piechart").select("svg").remove()
-  d3.select("#community_piechart").html("")
+  d3.select("#community_barchart").select("svg").remove()
+  d3.select("#community_barchart").html("")
 
 
   //console.log(active_community)
@@ -140,17 +140,18 @@ function draw_textbox_community_connections(){
        
     }); 
 
-  // Draw pie chart of node types if feature data is available
-  draw_community_piechart(activeCommunity);
+  // Draw bar chart of node types if feature data is available
+  draw_community_feature_barchart(activeCommunity);
 }
 
 
-// Draw a pie chart showing the distribution of node types (CS fields)
+// Draw a horizontal bar chart showing the distribution of node feature types
 // within a given community. Only renders when nodeFeatureLookup has data.
-function draw_community_piechart(communityId) {
+// Works with any dataset — uses FIELD_NAMES for labels with fallback to raw values.
+function draw_community_feature_barchart(communityId) {
   // Clear previous
-  d3.select("#community_piechart").select("svg").remove();
-  d3.select("#community_piechart").selectAll("div.pie-title").remove();
+  d3.select("#community_barchart").select("svg").remove();
+  d3.select("#community_barchart").selectAll("div").remove();
 
   // Only draw if we have node feature data
   if (!nodeFeatureLookup || Object.keys(nodeFeatureLookup).length === 0) return;
@@ -162,122 +163,142 @@ function draw_community_piechart(communityId) {
 
   if (communityNodes.length === 0) return;
 
-  // Count by CS field
+  // Count by feature field
   var fieldCounts = {};
   communityNodes.forEach(function(d) {
     var field = -1;
-    if (d.cs_field !== undefined && d.cs_field !== -1) {
-      field = d.cs_field;
-    } else if (nodeFeatureLookup.hasOwnProperty(d.node)) {
+    if (nodeFeatureLookup.hasOwnProperty(d.node)) {
       field = nodeFeatureLookup[d.node];
     }
-    if (field === -1) field = -1; // keep as unknown
-    var fieldName = CS_FIELD_NAMES.hasOwnProperty(field) ? CS_FIELD_NAMES[field] : "Unknown";
+    // Get display name: use FIELD_NAMES mapping if it exists, otherwise use raw value
+    var fieldName;
+    if (typeof FIELD_NAMES !== 'undefined' && FIELD_NAMES.hasOwnProperty(field)) {
+      fieldName = FIELD_NAMES[field];
+    } else if (field === -1) {
+      fieldName = "Unknown";
+    } else {
+      fieldName = String(field);
+    }
     if (!fieldCounts[fieldName]) fieldCounts[fieldName] = 0;
     fieldCounts[fieldName]++;
   });
 
-  // Convert to array for d3.pie
-  var pieData = Object.keys(fieldCounts).map(function(key) {
+  // Convert to array and sort descending
+  var barData = Object.keys(fieldCounts).map(function(key) {
     return { label: key, value: fieldCounts[key] };
   });
-
-  // Sort by value descending
-  pieData.sort(function(a, b) { return b.value - a.value; });
+  barData.sort(function(a, b) { return b.value - a.value; });
 
   // Dimensions
-  var pieWidth = 280,
-      pieHeight = 280,
-      radius = Math.min(pieWidth, pieHeight) / 2 - 10;
+  var margin = { top: 28, right: 20, bottom: 20, left: 110 },
+      chartWidth = 320 - margin.left - margin.right,
+      barHeight = 18,
+      barGap = 3,
+      chartHeight = barData.length * (barHeight + barGap);
 
-  // Color scale — use a perceptually distinct categorical palette
-  var pieColors = [
+  // Cap height
+  var maxHeight = 300;
+  if (chartHeight > maxHeight) chartHeight = maxHeight;
+
+  // Title
+  var featureLabel = nodeFeatureColumnName
+    ? nodeFeatureColumnName.replace(/_/g, ' ')
+    : "Node Type";
+  d3.select("#community_barchart")
+    .append("div")
+    .style("font-size", "14px")
+    .style("font-weight", "bold")
+    .style("margin-bottom", "4px")
+    .style("margin-top", "8px")
+    .text(featureLabel.charAt(0).toUpperCase() + featureLabel.slice(1) + " Distribution");
+
+  // Color scale
+  var barColors = [
     "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
     "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
     "#af7aa1", "#86bcb6", "#d37295", "#8cd17d", "#b6992d",
     "#499894"
   ];
   var color = d3.scaleOrdinal()
-    .domain(pieData.map(function(d) { return d.label; }))
-    .range(pieColors);
+    .domain(barData.map(function(d) { return d.label; }))
+    .range(barColors);
 
-  // Title
-  d3.select("#community_piechart")
-    .append("div")
-    .attr("class", "pie-title")
-    .html("<b>Node Type Distribution</b>")
-    .style("font-size", "16px")
-    .style("margin-top", "10px")
-    .style("margin-bottom", "4px");
+  // Scales
+  var xScale = d3.scaleLinear()
+    .domain([0, d3.max(barData, function(d) { return d.value; })])
+    .range([0, chartWidth]);
+
+  var yScale = d3.scaleBand()
+    .domain(barData.map(function(d) { return d.label; }))
+    .range([0, chartHeight])
+    .padding(0.15);
 
   // SVG
-  var svg = d3.select("#community_piechart")
+  var svg = d3.select("#community_barchart")
     .append("svg")
-      .attr("width", pieWidth)
-      .attr("height", pieHeight)
+      .attr("width", chartWidth + margin.left + margin.right)
+      .attr("height", chartHeight + margin.top + margin.bottom)
     .append("g")
-      .attr("transform", "translate(" + pieWidth / 2 + "," + pieHeight / 2 + ")");
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-  // Pie generator
-  var pie = d3.pie()
-    .value(function(d) { return d.value; })
-    .sort(null);
-
-  // Arc generator
-  var arc = d3.arc()
-    .innerRadius(radius * 0.4) // donut style
-    .outerRadius(radius);
-
-  var arcHover = d3.arc()
-    .innerRadius(radius * 0.4)
-    .outerRadius(radius + 6);
-
-  // Tooltip div (reuse existing or create)
-  var pieTooltip = d3.select("body").select(".pie-tooltip");
-  if (pieTooltip.empty()) {
-    pieTooltip = d3.select("body").append("div")
-      .attr("class", "pie-tooltip tooltip")
+  // Tooltip
+  var barTooltip = d3.select("body").select(".bar-feature-tooltip");
+  if (barTooltip.empty()) {
+    barTooltip = d3.select("body").append("div")
+      .attr("class", "bar-feature-tooltip tooltip")
       .style("opacity", 0);
   }
 
-  // Draw arcs
-  var arcs = svg.selectAll("path")
-    .data(pie(pieData))
+  // Bars
+  svg.selectAll(".feature-bar")
+    .data(barData)
     .enter()
-    .append("path")
-      .attr("d", arc)
-      .attr("fill", function(d) { return color(d.data.label); })
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 1.5)
+    .append("rect")
+      .attr("class", "feature-bar")
+      .attr("x", 0)
+      .attr("y", function(d) { return yScale(d.label); })
+      .attr("width", 0)
+      .attr("height", yScale.bandwidth())
+      .attr("fill", function(d) { return color(d.label); })
+      .attr("rx", 3)
       .style("cursor", "pointer")
       .on("mouseover", function(event, d) {
-        d3.select(this).transition().duration(150).attr("d", arcHover);
-        var pct = ((d.data.value / communityNodes.length) * 100).toFixed(1);
-        pieTooltip.transition().duration(150).style("opacity", 0.95);
-        pieTooltip.html("<b>" + d.data.label + "</b><br/>" + d.data.value + " nodes (" + pct + "%)")
+        d3.select(this).attr("opacity", 0.8);
+        var pct = ((d.value / communityNodes.length) * 100).toFixed(1);
+        barTooltip.transition().duration(150).style("opacity", 0.95);
+        barTooltip.html("<b>" + d.label + "</b><br/>" + d.value + " nodes (" + pct + "%)")
           .style("left", (event.pageX + 10) + "px")
           .style("top", (event.pageY - 20) + "px")
           .style("text-align", "left");
       })
       .on("mouseout", function() {
-        d3.select(this).transition().duration(150).attr("d", arc);
-        pieTooltip.transition().duration(300).style("opacity", 0);
-      });
+        d3.select(this).attr("opacity", 1);
+        barTooltip.transition().duration(300).style("opacity", 0);
+      })
+      .transition()
+      .duration(400)
+      .attr("width", function(d) { return xScale(d.value); });
 
-  // Legend below the pie
-  var legendContainer = d3.select("#community_piechart")
-    .append("div")
-    .attr("class", "pie-title")
-    .style("font-size", "11px")
-    .style("line-height", "1.6")
-    .style("margin-top", "6px");
+  // Value labels on bars
+  svg.selectAll(".feature-bar-label")
+    .data(barData)
+    .enter()
+    .append("text")
+      .attr("class", "feature-bar-label")
+      .attr("x", function(d) { return xScale(d.value) + 4; })
+      .attr("y", function(d) { return yScale(d.label) + yScale.bandwidth() / 2; })
+      .attr("dy", "0.35em")
+      .style("font-size", "10px")
+      .style("fill", "#333")
+      .text(function(d) { return d.value; });
 
-  pieData.forEach(function(d) {
-    var pct = ((d.value / communityNodes.length) * 100).toFixed(1);
-    legendContainer.append("span")
-      .html("<span style='display:inline-block;width:10px;height:10px;background:" + color(d.label) + ";margin-right:4px;border-radius:2px;'></span>" +
-        d.label + ": " + d.value + " (" + pct + "%)<br/>");
-  });
+  // Y axis (labels)
+  svg.append("g")
+    .call(d3.axisLeft(yScale).tickSize(0))
+    .select(".domain").remove();
+
+  svg.selectAll(".tick text")
+    .style("font-size", "10px");
 }
 
 
