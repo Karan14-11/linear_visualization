@@ -8,9 +8,11 @@ let heighest_degree_data
 let coarse_graph
 let number_of_community_connections_data
 let nodeFeatureLookup = {}
+let nodeFeatureColumnName = "" // The name of the feature column in node_features.csv
 
-// CS field class names mapping
-const CS_FIELD_NAMES = {
+// Field name mapping — can be overridden per dataset via window.FIELD_NAMES
+// Falls back to showing raw values if no mapping provided
+let FIELD_NAMES = window.FIELD_NAMES || {
   0: "Artificial Intelligence",
   1: "Comp. Linguistics",
   2: "Comp. Vision",
@@ -27,6 +29,8 @@ const CS_FIELD_NAMES = {
   13: "Programming Lang.",
   14: "Security"
 }
+// Keep CS_FIELD_NAMES as alias for backward compatibility
+var CS_FIELD_NAMES = FIELD_NAMES;
 
 //for community size barchart
 function showdata_count(data){
@@ -201,10 +205,18 @@ function showdata_spiral_community_chart(data){
 
       coarse_graph = data[9]
 
-    // Build node feature lookup from coauthor_cs_nodes.csv (data[12])
-    if (data[12]) {
+    // Build node feature lookup from node_features.csv (data[12])
+    // Dynamically detects whichever columns exist beyond 'node_id'
+    if (data[12] && data[12].length > 0) {
+      var columns = data[12].columns || Object.keys(data[12][0]);
+      // Find the ID column (node_id) and the feature column (everything else)
+      var idCol = columns.find(function(c) { return c.toLowerCase().replace(/[_\s]/g,'') === 'nodeid'; }) || columns[0];
+      var featureCol = columns.find(function(c) { return c !== idCol; }) || columns[1];
+      nodeFeatureColumnName = featureCol;
+      console.log("Node features detected — ID column: '" + idCol + "', Feature column: '" + featureCol + "'");
+
       data[12].forEach(function(d) {
-        nodeFeatureLookup[+d.node_id] = +d.cs_field_class;
+        nodeFeatureLookup[+d[idCol]] = isNaN(+d[featureCol]) ? d[featureCol] : +d[featureCol];
       });
       console.log("Node feature lookup built with " + Object.keys(nodeFeatureLookup).length + " entries");
     }
@@ -314,7 +326,14 @@ function showdata_spiral_community_chart(data){
 
 //window.addEventListener("resize", draw);
 
-DATADIR = "./temp_data/"
+DATADIR = window.DATADIR || "./temp_data/"
+
+// Load node features CSV (optional - may not exist for all datasets)
+var nodeFeaturesCsvPath = window.NODE_FEATURES_CSV || (DATADIR + "node_features.csv");
+var nodeFeaturesPromise = d3.csv(nodeFeaturesCsvPath).catch(function() {
+  console.log("No node_features.csv found at " + nodeFeaturesCsvPath + " — skipping node feature lookup.");
+  return null;
+});
 
 Promise.all([
   d3.csv(DATADIR+"facebook_data_transformed_new.csv"),
@@ -360,5 +379,5 @@ Promise.all([
   d3.json(DATADIR+"coarse_graph_data.json"),
   d3.json(DATADIR+"community_connection_list.json"),
   d3.csv(DATADIR+"commuity_number_of_connections.csv"),
-  d3.csv("coauthor_cs_nodes.csv")
+  nodeFeaturesPromise
   ]).then(showdata_spiral_community_chart)

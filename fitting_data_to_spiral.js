@@ -104,6 +104,8 @@ function draw_textbox_community_connections(){
   d3.select("#community_textbox").select("svg").remove()
   d3.select("#node_textbox").html("")
   d3.select("#community_connection_textbox").html("")
+  d3.select("#community_piechart").select("svg").remove()
+  d3.select("#community_piechart").html("")
 
 
   //console.log(active_community)
@@ -138,6 +140,144 @@ function draw_textbox_community_connections(){
        
     }); 
 
+  // Draw pie chart of node types if feature data is available
+  draw_community_piechart(activeCommunity);
+}
+
+
+// Draw a pie chart showing the distribution of node types (CS fields)
+// within a given community. Only renders when nodeFeatureLookup has data.
+function draw_community_piechart(communityId) {
+  // Clear previous
+  d3.select("#community_piechart").select("svg").remove();
+  d3.select("#community_piechart").selectAll("div.pie-title").remove();
+
+  // Only draw if we have node feature data
+  if (!nodeFeatureLookup || Object.keys(nodeFeatureLookup).length === 0) return;
+
+  // Get nodes in this community
+  var communityNodes = global_data_unchanged.filter(function(d) {
+    return d.community == communityId;
+  });
+
+  if (communityNodes.length === 0) return;
+
+  // Count by CS field
+  var fieldCounts = {};
+  communityNodes.forEach(function(d) {
+    var field = -1;
+    if (d.cs_field !== undefined && d.cs_field !== -1) {
+      field = d.cs_field;
+    } else if (nodeFeatureLookup.hasOwnProperty(d.node)) {
+      field = nodeFeatureLookup[d.node];
+    }
+    if (field === -1) field = -1; // keep as unknown
+    var fieldName = CS_FIELD_NAMES.hasOwnProperty(field) ? CS_FIELD_NAMES[field] : "Unknown";
+    if (!fieldCounts[fieldName]) fieldCounts[fieldName] = 0;
+    fieldCounts[fieldName]++;
+  });
+
+  // Convert to array for d3.pie
+  var pieData = Object.keys(fieldCounts).map(function(key) {
+    return { label: key, value: fieldCounts[key] };
+  });
+
+  // Sort by value descending
+  pieData.sort(function(a, b) { return b.value - a.value; });
+
+  // Dimensions
+  var pieWidth = 280,
+      pieHeight = 280,
+      radius = Math.min(pieWidth, pieHeight) / 2 - 10;
+
+  // Color scale — use a perceptually distinct categorical palette
+  var pieColors = [
+    "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
+    "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
+    "#af7aa1", "#86bcb6", "#d37295", "#8cd17d", "#b6992d",
+    "#499894"
+  ];
+  var color = d3.scaleOrdinal()
+    .domain(pieData.map(function(d) { return d.label; }))
+    .range(pieColors);
+
+  // Title
+  d3.select("#community_piechart")
+    .append("div")
+    .attr("class", "pie-title")
+    .html("<b>Node Type Distribution</b>")
+    .style("font-size", "16px")
+    .style("margin-top", "10px")
+    .style("margin-bottom", "4px");
+
+  // SVG
+  var svg = d3.select("#community_piechart")
+    .append("svg")
+      .attr("width", pieWidth)
+      .attr("height", pieHeight)
+    .append("g")
+      .attr("transform", "translate(" + pieWidth / 2 + "," + pieHeight / 2 + ")");
+
+  // Pie generator
+  var pie = d3.pie()
+    .value(function(d) { return d.value; })
+    .sort(null);
+
+  // Arc generator
+  var arc = d3.arc()
+    .innerRadius(radius * 0.4) // donut style
+    .outerRadius(radius);
+
+  var arcHover = d3.arc()
+    .innerRadius(radius * 0.4)
+    .outerRadius(radius + 6);
+
+  // Tooltip div (reuse existing or create)
+  var pieTooltip = d3.select("body").select(".pie-tooltip");
+  if (pieTooltip.empty()) {
+    pieTooltip = d3.select("body").append("div")
+      .attr("class", "pie-tooltip tooltip")
+      .style("opacity", 0);
+  }
+
+  // Draw arcs
+  var arcs = svg.selectAll("path")
+    .data(pie(pieData))
+    .enter()
+    .append("path")
+      .attr("d", arc)
+      .attr("fill", function(d) { return color(d.data.label); })
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 1.5)
+      .style("cursor", "pointer")
+      .on("mouseover", function(event, d) {
+        d3.select(this).transition().duration(150).attr("d", arcHover);
+        var pct = ((d.data.value / communityNodes.length) * 100).toFixed(1);
+        pieTooltip.transition().duration(150).style("opacity", 0.95);
+        pieTooltip.html("<b>" + d.data.label + "</b><br/>" + d.data.value + " nodes (" + pct + "%)")
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 20) + "px")
+          .style("text-align", "left");
+      })
+      .on("mouseout", function() {
+        d3.select(this).transition().duration(150).attr("d", arc);
+        pieTooltip.transition().duration(300).style("opacity", 0);
+      });
+
+  // Legend below the pie
+  var legendContainer = d3.select("#community_piechart")
+    .append("div")
+    .attr("class", "pie-title")
+    .style("font-size", "11px")
+    .style("line-height", "1.6")
+    .style("margin-top", "6px");
+
+  pieData.forEach(function(d) {
+    var pct = ((d.value / communityNodes.length) * 100).toFixed(1);
+    legendContainer.append("span")
+      .html("<span style='display:inline-block;width:10px;height:10px;background:" + color(d.label) + ";margin-right:4px;border-radius:2px;'></span>" +
+        d.label + ": " + d.value + " (" + pct + "%)<br/>");
+  });
 }
 
 
@@ -285,6 +425,7 @@ let adjacent_nodes_find_node = connections_list[find_node_id]
 d3.select("#community_spiral").select("svg").remove()
 d3.select("#node_spiral").select("svg").remove()
 d3.select("#community_textbox").html("")
+d3.select("#community_piechart").html("")
 
 var svg_community = d3.select("#community_spiral").append("svg")
     .attr("width", width)
