@@ -633,11 +633,17 @@ function colorNodesByEign(){
     d3.select("#community_barchart").html("")
 
   // append the svg object to the body of the page
-    var csFieldClass = nodeFeatureLookup.hasOwnProperty(+find_node_id) ? nodeFeatureLookup[+find_node_id] : -1;
-    var csFieldName = CS_FIELD_NAMES.hasOwnProperty(csFieldClass) ? CS_FIELD_NAMES[csFieldClass] : "Unknown";
+    var featureHtml = "";
+    if (Object.keys(nodeFeatureLookup).length > 0) {
+      var colLabel = nodeFeatureColumnName ? (nodeFeatureColumnName.charAt(0).toUpperCase() + nodeFeatureColumnName.slice(1).replace(/_/g, ' ')) : "Feature";
+      var fieldVal = nodeFeatureLookup.hasOwnProperty(+find_node_id) ? nodeFeatureLookup[+find_node_id] : -1;
+      var fieldName = typeof FIELD_NAMES !== 'undefined' && FIELD_NAMES.hasOwnProperty(fieldVal) ? FIELD_NAMES[fieldVal] : (fieldVal === -1 ? "Unknown" : fieldVal);
+      featureHtml = "<b>" + colLabel + ":</b> " + fieldName + "<br/>";
+    }
+
     var svg = d3.select("#node_textbox")
       .html("<br/><b>NODE DATA</b><br/><b>Community: </b>"+ node_community +"<br/>" + 
-      "<b>CS Field:</b> "+ csFieldName + "<br/>" +
+      featureHtml +
       "<b>Degree:</b> "+ node_centrality + "<br/>" +
        "<b>Betweeness:</b> " + node_betweness + "<br/>" +
        "<b>Closeness:</b> " + node_closeness + "<br/>" +

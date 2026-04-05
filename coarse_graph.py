@@ -325,7 +325,7 @@ def dictAfterOutlierRemovalFromDifferentCentralitities(data):
 
   
 #read graph data
-G = nx.read_edgelist("coauthor_cs_edges.csv", delimiter=",", nodetype=int)
+G = nx.read_edgelist("edges.csv", delimiter=",", nodetype=int)
 # G =  nx.read_edgelist("facebook_combined.txt")
  
    

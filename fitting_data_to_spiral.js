@@ -63,16 +63,22 @@ function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, ei
 
   var inter_community_connections =adjacent_nodes.length - count;
 
-  // Get the CS field for active node
-  var csFieldClass = nodeFeatureLookup.hasOwnProperty(activeNode) ? nodeFeatureLookup[activeNode] : -1;
-  var csFieldName = CS_FIELD_NAMES.hasOwnProperty(csFieldClass) ? CS_FIELD_NAMES[csFieldClass] : "Unknown";
+  // Build node feature string conditionally
+  var featureHtml = "";
+  if (Object.keys(nodeFeatureLookup).length > 0) {
+    var colLabel = nodeFeatureColumnName ? (nodeFeatureColumnName.charAt(0).toUpperCase() + nodeFeatureColumnName.slice(1).replace(/_/g, ' ')) : "Feature";
+    var fieldVal = nodeFeatureLookup.hasOwnProperty(activeNode) ? nodeFeatureLookup[activeNode] : -1;
+    // For mapping like CS fields, use FIELD_NAMES if present, else just show the raw value.
+    var fieldName = typeof FIELD_NAMES !== 'undefined' && FIELD_NAMES.hasOwnProperty(fieldVal) ? FIELD_NAMES[fieldVal] : (fieldVal === -1 ? "Unknown" : fieldVal);
+    featureHtml = "<b>" + colLabel + ": </b>" + fieldName + "<br/>";
+  }
 
   d3.select("#node_textbox").select("svg").remove()
   //d3.select("#node_textbox").html("")
 
   // append the svg object to the body of the page
   var svg = d3.select("#node_textbox")
-      .html("<b>Node of interest: </b>"+ activeNode +"<br/>" +"<b>CS Field: </b>"+ csFieldName +"<br/>" +"<b>Degree: </b>"+ deg +"<br/>" +"<b>Closeness: </b>"+ clo +"<br/>" + "<b>Betweenness: </b>"+ bet +"<br/>" +"<b>Eigen: </b>"+ eig +"<br/>" + "<br/>"
+      .html("<b>Node of interest: </b>"+ activeNode +"<br/>" + featureHtml +"<b>Degree: </b>"+ deg +"<br/>" +"<b>Closeness: </b>"+ clo +"<br/>" + "<b>Betweenness: </b>"+ bet +"<br/>" +"<b>Eigen: </b>"+ eig +"<br/>" + "<br/>"
        + "<b>Total edges:</b> " + adjacent_nodes.length + "<br/>" +
        "<b>Intra-community node-to-node edges:</b> " + count + "<br/>" +
        "<b>Inter-community node-to-node edges:</b> " + inter_community_connections + "<br/>" +
