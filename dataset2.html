@@ -188,228 +188,121 @@
               </div>
             </li>
 
-
+            <!-- Community View Mode -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#communityViewMode">
+                <span>Community View</span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
+              </a>
+              <div class="collapse" id="communityViewMode">
+                <ul class="navbar-nav ps-3">
+                  <li>
+                    <button class="btn btn-sm btn-outline-secondary mb-1" onclick="switchCommunityView('louvain')" type="button">Louvain Communities</button>
+                  </li>
+                  <li>
+                    <button class="btn btn-sm btn-outline-secondary mb-1" onclick="switchCommunityView('metadata')" type="button">Metadata Groups</button>
+                  </li>
+                </ul>
+              </div>
+            </li>
+
+            <!-- Find Node -->
+            <li>
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#findNode">
                 <span>Find Node</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="findNode">
                 <ul class="navbar-nav ps-3">
-
                   <li>
-                    <label for="customRange2" class="form-label text-white">Node Id = <input type="text" id="textInputNodeId" class = "text-white bg-dark text-center" size="5"></label>
+                    <label for="customRange2" class="form-label text-white">Node Id = <input type="text" id="textInputNodeId" class="text-white bg-dark text-center" size="5"></label>
                     <button onclick="find_node_by_label()">ok</button>
-
                   </li>
                 </ul>
               </div>
-
             </li>
 
-
+            <!-- Most Connected Nodes -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#mostConnected">
                 <span>Most Connected Nodes</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="mostConnected">
                 <ul class="navbar-nav ps-3">
-
                   <li>
-                    <label for="customRange2" class="form-label text-white">Degree >= <input type="text" id="textInputConnecteddeg" value="0" class = "text-white bg-dark text-center" size="5"></label>
+                    <label for="customRange2" class="form-label text-white">Degree >= <input type="text" id="textInputConnecteddeg" value="0" class="text-white bg-dark text-center" size="5"></label>
                     <input type="range" class="form-range text-white" min="0" max="500" id="MostConnected" onchange="MostConnectedNodes(this.value)" value="0">
-
                   </li>
                 </ul>
               </div>
-
             </li>
 
-
+            <!-- Ranking Nodes -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#rankingNodes">
                 <span>Ranking Nodes</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="rankingNodes">
                 <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "degree_ranking()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Degree Centrality
-                    </button>
-                  </li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="degree_ranking()" type="button">Degree Centrality</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="closeness_ranking()" type="button">Closeness Centrality</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="between_ranking()" type="button">Betweenness Centrality</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="eign_ranking()" type="button">Eign Centrality</button></li>
                 </ul>
               </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "closeness_ranking()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Closeness Centrality
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "between_ranking()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Betweenness Centrality
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "eign_ranking()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Eign Centrality
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
             </li>
 
+            <!-- Ranking Communities -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#rankingCommunities">
                 <span>Ranking Communities</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="rankingCommunities">
                 <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "Community_ranking_size()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Size
-                    </button>
-                  </li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="Community_ranking_size()" type="button">Size</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="Community_ranking_density()" type="button">Highest Density</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="Community_ranking_degree()" type="button">Highest Degree</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="Community_ranking_connection()" type="button">Community Connections</button></li>
                 </ul>
               </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "Community_ranking_density()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Heighest Desity
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "Community_ranking_degree()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Heighest Degree
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "Community_ranking_connection()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Community Connections
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
             </li>
 
-
+            <!-- Filtering Nodes -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#filteringNodes">
                 <span>Filtering Nodes</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="filteringNodes">
                 <ul class="navbar-nav ps-3">
-
                   <li>
-                    <label for="customRange2" class="form-label text-white">Degree >= <input type="text" id="textInputdeg" value="0" class = "text-white bg-dark text-center" size="5"></label>
+                    <label class="form-label text-white">Degree >= <input type="text" id="textInputdeg" value="0" class="text-white bg-dark text-center" size="5"></label>
                     <input type="range" class="form-range text-white" min="0" max="500" id="Degree" onchange="updateTextInputdeg(this.value)" value="0">
-
                   </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
                   <li>
-                    <label for="customRange2" class="form-label text-white">Closeness>= <input type="text" id="textInputclo" value="0" class = "text-white bg-dark text-center" size="5"></label>
-                    <input type="range" class="form-range text-white" min="0" max="1" step= ".1" id="Closeness" onchange="updateTextInputclo(this.value)" value="0">
+                    <label class="form-label text-white">Closeness>= <input type="text" id="textInputclo" value="0" class="text-white bg-dark text-center" size="5"></label>
+                    <input type="range" class="form-range text-white" min="0" max="1" step=".1" id="Closeness" onchange="updateTextInputclo(this.value)" value="0">
                   </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
                   <li>
-                    <label for="customRange2" class="form-label text-white">Eign>= <input type="text" id="textInputeig" value="0" class = "text-white bg-dark text-center" size="5"></label>
-                    <input type="range" class="form-range text-white" min="0" max=".1" step= ".01" id="Eign" onchange="updateTextInputeig(this.value)" value="0">
-
-
+                    <label class="form-label text-white">Eign>= <input type="text" id="textInputeig" value="0" class="text-white bg-dark text-center" size="5"></label>
+                    <input type="range" class="form-range text-white" min="0" max=".1" step=".01" id="Eign" onchange="updateTextInputeig(this.value)" value="0">
                   </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
                   <li>
-                    <label for="customRange2" class="form-label text-white">Betweenness>= <input type="text" id="textInputbet" value="0" class = "text-white bg-dark text-center" size="5"></label>
-                    <input type="range" class="form-range text-white" min="0" max="1" step= ".1" id="Betweenness" onchange="updateTextInputbet(this.value)" value="0">
-                 </li>
+                    <label class="form-label text-white">Betweenness>= <input type="text" id="textInputbet" value="0" class="text-white bg-dark text-center" size="5"></label>
+                    <input type="range" class="form-range text-white" min="0" max="1" step=".1" id="Betweenness" onchange="updateTextInputbet(this.value)" value="0">
+                  </li>
                 </ul>
               </div>
             </li>
+
+            <!-- Filter Communities -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#communityFilter"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#communityFilter">
                 <span>Filter Communities</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
               <div class="collapse" id="communityFilter">
                 <ul class="navbar-nav ps-3">
@@ -425,18 +318,11 @@
               </div>
             </li>
 
+            <!-- Filter Communities by Range -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#communityRangeFilter"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#communityRangeFilter">
                 <span>Filter Communities by Range</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
               <div class="collapse" id="communityRangeFilter">
                 <ul class="navbar-nav ps-3" style="font-size:11px">
@@ -476,62 +362,19 @@
               </div>
             </li>
 
+            <!-- Color-Coding -->
             <li>
-              <a
-                class="nav-link px-3 sidebar-link"
-                data-bs-toggle="collapse"
-                href="#layouts"
-              >
+              <a class="nav-link px-3 sidebar-link" data-bs-toggle="collapse" href="#colorCoding">
                 <span>Color-Coding</span>
-                <span class="ms-auto">
-                  <span class="right-icon">
-                    <i class="bi bi-chevron-down"></i>
-                  </span>
-                </span>
+                <span class="ms-auto"><span class="right-icon"><i class="bi bi-chevron-down"></i></span></span>
               </a>
-              <div class="collapse" id="layouts">
+              <div class="collapse" id="colorCoding">
                 <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "colorNodesByDensity()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Density
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "colorNodesByDegree()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Degree
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "colorNodesByCloseness()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Closeness
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "colorNodesByBetweeness()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Betweenness
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div class="collapse" id="layouts">
-                <ul class="navbar-nav ps-3">
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "colorNodesByEign()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      Eign
-                    </button>
-                  </li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="colorNodesByDensity()" type="button">Density</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="colorNodesByDegree()" type="button">Degree</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="colorNodesByCloseness()" type="button">Closeness</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="colorNodesByBetweeness()" type="button">Betweenness</button></li>
+                  <li><button class="btn btn-sm btn-outline-secondary mb-1" onclick="colorNodesByEign()" type="button">Eign</button></li>
                 </ul>
               </div>
             </li>
@@ -543,18 +386,10 @@
               </div>
             </li>
             <li>
-  
-                  <li>
-                    <button class="btn btn-sm btn-outline-secondary" onclick= "edge_visualization()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                      hide/show-edges
-                    </button>
-                  </li>
-
+              <button class="btn btn-sm btn-outline-secondary ms-3 mb-1" onclick="edge_visualization()" type="button">hide/show-edges</button>
             </li>
             <li>
-              <button class="btn btn-sm btn-outline-secondary" onclick= "reset_button()"type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                Reset
-              </button>
+              <button class="btn btn-sm btn-outline-secondary ms-3 mb-1" onclick="reset_button()" type="button">Reset</button>
             </li>
             <li>
               <a href="#" class="nav-link px-3">

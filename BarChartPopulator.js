@@ -276,9 +276,15 @@ function showdata_spiral_community_chart(data){
 
     prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
     global_data = prepare_data
-    //below two lines are removed in latest code need to check with garima
-    //let svg = d3.select("#chart")
-    //initializeSpiralChart(svg, height, width)
+
+    // If more height is needed for all communities, reinitialize chart with proper size
+    if (computed_total_community_height > height) {
+      d3.select("#chart").selectAll("svg").remove();
+      height = computed_total_community_height;
+      d3.select("#chart").attr("height", height);
+      svg = d3.select("#chart");
+      initializeSpiralChart(svg, height, width);
+    }
 
   draw_spiral_community()
   /*var brush = d3.brush()
@@ -349,17 +355,25 @@ Promise.all([
   show_table_data(data[0]);
   console.log("table OK");
 
-  showdata_count(data[1]);
-  console.log("count OK");
+  if (document.getElementById("barchart-no_of_nodes")) {
+    showdata_count(data[1]);
+    console.log("count OK");
+  }
 
-  showdata_density(data[2]);
-  console.log("density OK");
+  if (document.getElementById("barchart-density")) {
+    showdata_density(data[2]);
+    console.log("density OK");
+  }
 
-  showdata_hdegree(data[3]);
-  console.log("hdegree OK");
+  if (document.getElementById("barchart-h_degree")) {
+    showdata_hdegree(data[3]);
+    console.log("hdegree OK");
+  }
 
-  showdata_connections(data[4]);
-  console.log("connections OK");
+  if (document.getElementById("heatmap-connectivity")) {
+    showdata_connections(data[4]);
+    console.log("connections OK");
+  }
 
 }).catch(err => {
   console.error("Promise.all failed:", err);

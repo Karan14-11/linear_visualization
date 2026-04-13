@@ -18,6 +18,7 @@ let range_for_community_legend=[]
 let adjacent_community
 let edge_strength_scale
 let edge_strength_scale_highlight
+var computed_total_community_height = 0;
 
 
 let find_node_id = -1;
@@ -911,6 +912,9 @@ function computing_spiral_positions(center_positions_spiral, data_points, sides,
 domain_for_community_legend=[]
 range_for_community_legend=[]
 
+// Reset the total content height tracker for this computation
+computed_total_community_height = 0;
+
 newdata1=[]
 
 center_positions_spiral.forEach(function(community_data){
@@ -920,7 +924,7 @@ center_positions_spiral.forEach(function(community_data){
   filtered_community= data_points.filter(function(d){
    
     
-    return d.community===community_data.community})
+    return d.community==community_data.community})
   console.log(filtered_community)
   no_of_points_in_community = filtered_community.length
   let flag_last = 0
@@ -1002,6 +1006,8 @@ center_positions_spiral.forEach(function(community_data){
   //console.log(newdata1)
 
 })
+// Store final height so SVG and containers can be sized appropriately
+computed_total_community_height = initial_y + 40; // add bottom padding
 return newdata1
 /*
 for j in unique_communities:
@@ -1644,7 +1650,8 @@ d3.selectAll("mynodes").remove()
 d3.selectAll("mylabels").remove()
 d3.selectAll("mylinks").remove()
 
-let height = 700
+// Use the computed height from community layout, with a minimum of 700
+let height = Math.max(700, computed_total_community_height || 700)
 let width =1200
 var svg = d3.select("#chart")
   .append("svg")

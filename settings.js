@@ -66,6 +66,8 @@ console.log(number_of_community_connections_data)
   //computing_spiral_positions(center_positions_spiral, data, optimal_no_of_nodes, height, width)
   //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
   prepare_data = computing_spiral_positions(community_size_data, prepare_data,optimal_no_of_nodes, height, width)
+  // Update height to match the actual content
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -125,6 +127,7 @@ function Community_ranking_degree(){
 
   //calculate final x and y position for each point
   prepare_data = computing_spiral_positions(heighest_degree_data, prepare_data, optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -180,6 +183,7 @@ function Community_ranking_density(){
 
   //calculate final x and y position for each point
   prepare_data = computing_spiral_positions(heighest_density_data, prepare_data, optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -235,6 +239,7 @@ function Community_ranking_connection(){
 
   //calculate final x and y position for each point
   prepare_data = computing_spiral_positions(number_of_community_connections_data, prepare_data, optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -321,6 +326,7 @@ function degree_ranking(){
   //computing_spiral_positions(center_positions_spiral, data, optimal_no_of_nodes, height, width)
   //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -361,6 +367,7 @@ function closeness_ranking(){
   //calculate final x and y position for each point
   //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -401,6 +408,7 @@ function eign_ranking(){
   //calculate final x and y position for each point
   //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -441,6 +449,7 @@ function between_ranking(){
   //calculate final x and y position for each point
   //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data
   global_data_unchanged = prepare_data
 
@@ -791,6 +800,7 @@ function colorNodesByEign(){
 
     // Recompute positions
     prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+    height = Math.max(height, computed_total_community_height || height);
     global_data = prepare_data;
 
     d3.select("#chart").selectAll("svg").remove();
@@ -833,6 +843,7 @@ function colorNodesByEign(){
     });
 
     prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+    height = Math.max(height, computed_total_community_height || height);
     global_data = prepare_data;
 
     d3.select("#chart").selectAll("svg").remove();
@@ -931,6 +942,7 @@ function applyCommunityRangeFilter() {
 
   // Recompute positions
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data;
 
   d3.select("#chart").selectAll("svg").remove();
@@ -978,12 +990,128 @@ function resetCommunityRangeFilter() {
   });
 
   prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
+  height = Math.max(height, computed_total_community_height || height);
   global_data = prepare_data;
 
   d3.select("#chart").selectAll("svg").remove();
   var svg = d3.select("#chart");
   initializeSpiralChart(svg, height, width);
   draw_spiral_community();
+
+  table.selectAll("tr").remove();
+  show_table_data(global_data);
+}
+// ============================================================
+// Community View Toggle: Louvain vs Metadata
+// ============================================================
+var community_view_mode = 'louvain'; // 'louvain' or 'metadata'
+var original_community_backup = null; // stores original Louvain community assignments
+var original_community_size_data = null;
+var original_heighest_degree_data = null;
+var original_heighest_density_data = null;
+var original_number_of_community_connections_data = null;
+
+function switchCommunityView(mode) {
+  if (mode === community_view_mode) return; // already in this mode
+
+  // Backup original Louvain communities on first switch
+  if (!original_community_backup && global_data_unchanged && global_data_unchanged.length > 0) {
+    original_community_backup = global_data_unchanged.map(function(d) { return d.community; });
+    original_community_size_data = community_size_data.slice();
+    original_heighest_degree_data = heighest_degree_data.slice();
+    original_heighest_density_data = heighest_density_data.slice();
+    original_number_of_community_connections_data = number_of_community_connections_data.slice();
+  }
+
+  community_view_mode = mode;
+
+  if (mode === 'metadata') {
+    // Check if nodeFeatureLookup has data
+    if (!nodeFeatureLookup || Object.keys(nodeFeatureLookup).length === 0) {
+      alert("No metadata available for this dataset. Node features CSV may not be loaded.");
+      community_view_mode = 'louvain';
+      return;
+    }
+
+    // Replace community field with cs_field (metadata group)
+    global_data_unchanged.forEach(function(d) {
+      d.community = d.cs_field !== undefined && d.cs_field !== -1 ? d.cs_field : -1;
+    });
+
+    // Recompute community ranking data from the metadata communities
+    var communityCountMap = {};
+    global_data_unchanged.forEach(function(d) {
+      var key = String(d.community);
+      communityCountMap[key] = (communityCountMap[key] || 0) + 1;
+    });
+
+    // Build community_size_data preserving original type
+    var uniqueComms = [];
+    var seen = {};
+    global_data_unchanged.forEach(function(d) {
+      var key = String(d.community);
+      if (!seen[key]) {
+        seen[key] = true;
+        uniqueComms.push(d.community);
+      }
+    });
+
+    community_size_data = uniqueComms.map(function(comm) {
+      return { community: comm, size: communityCountMap[String(comm)] || 0 };
+    }).sort(function(a, b) { return d3.descending(a.size, b.size); });
+
+    // Build placeholder degree/density/connections data for metadata communities
+    heighest_degree_data = community_size_data.map(function(d) {
+      return { community: d.community, degree: 0 };
+    });
+    heighest_density_data = community_size_data.map(function(d) {
+      return { community: d.community, density: 0 };
+    });
+    number_of_community_connections_data = community_size_data.map(function(d) {
+      return { community: d.community, connections: 0 };
+    });
+
+    console.log("Metadata communities:", community_size_data.length, community_size_data);
+
+  } else {
+    // Restore original Louvain communities
+    if (original_community_backup) {
+      global_data_unchanged.forEach(function(d, i) {
+        d.community = original_community_backup[i];
+      });
+      community_size_data = original_community_size_data.slice();
+      heighest_degree_data = original_heighest_degree_data.slice();
+      heighest_density_data = original_heighest_density_data.slice();
+      number_of_community_connections_data = original_number_of_community_connections_data.slice();
+    }
+  }
+
+  // Rebuild positions
+  var height = 1200;
+  var width = 1200;
+
+  var prepare_data = [];
+  var unique_communities_set = new Set(global_data_unchanged.map(function(d) { return d.community; }));
+  unique_communities_set.forEach(function(entry) {
+    var comm_data = global_data_unchanged.filter(function(d) { return d.community == entry; });
+    comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
+    prepare_data.push.apply(prepare_data, comm_data);
+  });
+
+  prepare_data = computing_spiral_positions(community_size_data, prepare_data, optimal_no_of_nodes, height, width);
+  height = Math.max(height, computed_total_community_height || height);
+  global_data = prepare_data;
+
+  d3.select("#chart").selectAll("svg").remove();
+  d3.select("#chart").attr("height", height);
+  var svg = d3.select("#chart");
+  initializeSpiralChart(svg, height, width);
+  draw_spiral_community();
+
+  // Update tooltip
+  var numComms = community_size_data.length;
+  var modeLabel = mode === 'metadata' ? 'Metadata (' + numComms + ' groups)' : 'Louvain';
+  d3.select("#community_ranking_tooltip").html("<b>Community View:</b> " + modeLabel);
 
   table.selectAll("tr").remove();
   show_table_data(global_data);
