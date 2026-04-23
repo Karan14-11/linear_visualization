@@ -1006,6 +1006,7 @@ function resetCommunityRangeFilter() {
 // ============================================================
 var community_view_mode = 'louvain'; // 'louvain' or 'metadata'
 var original_community_backup = null; // stores original Louvain community assignments
+var original_density_backup = null;   // stores original Louvain density assignments
 var original_community_size_data = null;
 var original_heighest_degree_data = null;
 var original_heighest_density_data = null;
@@ -1017,6 +1018,7 @@ function switchCommunityView(mode) {
   // Backup original Louvain communities on first switch
   if (!original_community_backup && global_data_unchanged && global_data_unchanged.length > 0) {
     original_community_backup = global_data_unchanged.map(function(d) { return d.community; });
+    original_density_backup = global_data_unchanged.map(function(d) { return d.density; });
     original_community_size_data = community_size_data.slice();
     original_heighest_degree_data = heighest_degree_data.slice();
     original_heighest_density_data = heighest_density_data.slice();
@@ -1060,13 +1062,46 @@ function switchCommunityView(mode) {
       return { community: comm, size: communityCountMap[String(comm)] || 0 };
     }).sort(function(a, b) { return d3.descending(a.size, b.size); });
 
-    // Build placeholder degree/density/connections data for metadata communities
+    // Build placeholder degree/connections data, but accurately compute density
+    var commNodesMap = {};
+    global_data_unchanged.forEach(function(d) {
+      if (!commNodesMap[d.community]) commNodesMap[d.community] = [];
+      commNodesMap[d.community].push(d);
+    });
+
     heighest_degree_data = community_size_data.map(function(d) {
       return { community: d.community, degree: 0 };
     });
+    
     heighest_density_data = community_size_data.map(function(d) {
-      return { community: d.community, density: 0 };
+      var comm_nodes = commNodesMap[d.community] || [];
+      var nSize = comm_nodes.length;
+      var edges = 0;
+      
+      var nodeIds = new Set(comm_nodes.map(function(n) { return n.node; }));
+      comm_nodes.forEach(function(nodeObj) {
+         var neighbors = connections_list[nodeObj.node] || [];
+         neighbors.forEach(function(nb) {
+            // connections_list nodes are sometimes strings, sometimes numbers. Standardize lookup.
+            if (nodeIds.has(String(nb)) || nodeIds.has(Number(nb))) {
+               edges++;
+            }
+         });
+      });
+      edges = edges / 2;
+      var density = 0;
+      if (nSize > 1) {
+         density = edges / (nSize * (nSize - 1) / 2);
+      }
+      
+      // Assign the new community-wide density to each metadata node
+      comm_nodes.forEach(function(nodeObj) {
+         nodeObj.density = density;
+      });
+
+      return { community: d.community, density: density };
     });
+    
     number_of_community_connections_data = community_size_data.map(function(d) {
       return { community: d.community, connections: 0 };
     });
@@ -1078,6 +1113,7 @@ function switchCommunityView(mode) {
     if (original_community_backup) {
       global_data_unchanged.forEach(function(d, i) {
         d.community = original_community_backup[i];
+        d.density = original_density_backup[i];
       });
       community_size_data = original_community_size_data.slice();
       heighest_degree_data = original_heighest_degree_data.slice();
