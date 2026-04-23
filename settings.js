@@ -864,13 +864,13 @@ function colorNodesByEign(){
 
 function applyCommunityRangeFilter() {
   var minSize = parseFloat(document.getElementById('commRangeMinSize').value) || 0;
-  var maxSize = parseFloat(document.getElementById('commRangeMaxSize').value) || Infinity;
+  var maxSize = Infinity;
   var minDensity = parseFloat(document.getElementById('commRangeMinDensity').value) || 0;
-  var maxDensity = parseFloat(document.getElementById('commRangeMaxDensity').value) || Infinity;
+  var maxDensity = Infinity;
   var minDegree = parseFloat(document.getElementById('commRangeMinDegree').value) || 0;
-  var maxDegree = parseFloat(document.getElementById('commRangeMaxDegree').value) || Infinity;
+  var maxDegree = Infinity;
   var minConn = parseFloat(document.getElementById('commRangeMinConn').value) || 0;
-  var maxConn = parseFloat(document.getElementById('commRangeMaxConn').value) || Infinity;
+  var maxConn = Infinity;
 
   // Build lookup maps for fast access
   var sizeMap = {};
@@ -955,14 +955,14 @@ function applyCommunityRangeFilter() {
 }
 
 function resetCommunityRangeFilter() {
-  document.getElementById('commRangeMinSize').value = '';
-  document.getElementById('commRangeMaxSize').value = '';
-  document.getElementById('commRangeMinDensity').value = '';
-  document.getElementById('commRangeMaxDensity').value = '';
-  document.getElementById('commRangeMinDegree').value = '';
-  document.getElementById('commRangeMaxDegree').value = '';
-  document.getElementById('commRangeMinConn').value = '';
-  document.getElementById('commRangeMaxConn').value = '';
+  document.getElementById('commRangeMinSize').value = '0';
+  if(document.getElementById('commRangeMinSizeText')) document.getElementById('commRangeMinSizeText').value = '0';
+  document.getElementById('commRangeMinDensity').value = '0';
+  if(document.getElementById('commRangeMinDensityText')) document.getElementById('commRangeMinDensityText').value = '0';
+  document.getElementById('commRangeMinDegree').value = '0';
+  if(document.getElementById('commRangeMinDegreeText')) document.getElementById('commRangeMinDegreeText').value = '0';
+  document.getElementById('commRangeMinConn').value = '0';
+  if(document.getElementById('commRangeMinConnText')) document.getElementById('commRangeMinConnText').value = '0';
 
   global_data = global_data_unchanged;
 

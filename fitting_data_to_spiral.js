@@ -1222,7 +1222,12 @@ console.log(global_data)
                                       else{
                                         var csClass = nodeFeatureLookup.hasOwnProperty(d.node) ? nodeFeatureLookup[d.node] : -1;
                                         var csName = CS_FIELD_NAMES.hasOwnProperty(csClass) ? CS_FIELD_NAMES[csClass] : "Unknown";
-                                        div.html("<b>Node:</b> "+ d.node +"<br/>" +"<b>Community:</b> " +d.community+ "<br/>"+"<b>Degree:</b> "+ d.centrality +"<br/>"+"<b>CS Field:</b> "+ csName )
+                                        div.html("<b>Node:</b> "+ d.node +"<br/>" +"<b>Community:</b> " +d.community+ "<br/>"+
+                                                 "<b>Degree:</b> "+ parseFloat(d.centrality).toFixed(2) +"<br/>"+
+                                                 "<b>Closeness:</b> "+ parseFloat(d.closeness).toFixed(4) +"<br/>"+
+                                                 "<b>Betweenness:</b> "+ parseFloat(d.betwness).toFixed(4) +"<br/>"+
+                                                 "<b>Eigenvector:</b> "+ parseFloat(d.eign).toFixed(4) +"<br/>"+
+                                                 "<b>CS Field:</b> "+ csName )
                                         .style("left", (event.pageX) + "px")
                                         .style("top", (event.pageY - 28) + "px")
                                         .style("text-align", "left");
