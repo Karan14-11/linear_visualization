@@ -3,466 +3,306 @@ let eign_var = 0;
 let betweenness_var = 0;
 let closeness_var = 0;
 
-let flag_community_size =1
-let flag_community_degree =0
-let flag_community_density=0
-let flag_community_connections=0
+// ============================================================
+// Active dataset
+// The community filter defines the active subset: every ranking, node
+// filter, colouring, search and Most Connected works only on it.
+// global_data_unchanged stays the full master list of nodes.
+// ============================================================
+let community_ranking_key = null      // null = page-load order, else 'size' | 'degree' | 'density' | 'connections'
+let node_ranking_key = 'centrality'   // 'centrality' (degree) | 'closeness' | 'eign' | 'betwness'
+let full_community_stats              // whole-dataset community stats {size, degree, density, connections}
+let active_communities = new Set()    // community ids in the active subset
+let active_data = []                  // nodes of the active communities
+let active_node_community = new Map() // node id -> community, for active nodes
+let layout_data = []                  // active_data with positions for the current ranking
 
-//community ranking
+function all_community_ids(){
+  return full_community_stats.size.map(function(d){ return d.community })
+}
+
+function community_filter_active(){
+  return active_communities.size < full_community_stats.size.length
+}
+
+// neighbours of a node that are inside the active subset
+function active_neighbours(node){
+  var neighbours = connections_list[node] || []
+  if (!community_filter_active()) return neighbours
+  return neighbours.filter(function(m){ return active_node_community.has(+m) })
+}
+
+// "(full network: N)" after a degree that was counted inside the active subset
+function degree_label_suffix(d){
+  if (!d || !community_filter_active() || d.centrality == d.centrality_full) return ""
+  return " (full network: " + d.centrality_full + ")"
+}
+
+// closeness and eigenvector are always whole-network values
+function full_network_suffix(){
+  return community_filter_active() ? " (full network)" : ""
+}
+
+// make `ids` the active subset; degree and community stats are recomputed inside it
+function set_active_communities(ids){
+  active_communities = new Set(ids)
+  active_data = global_data_unchanged.filter(function(d){ return active_communities.has(d.community) })
+  active_node_community = new Map()
+  active_data.forEach(function(d){ active_node_community.set(d.node, d.community) })
+  var filtered = community_filter_active()
+
+  global_data_unchanged.forEach(function(d){
+    d.centrality = (filtered && active_node_community.has(d.node)) ? active_neighbours(d.node).length : d.centrality_full
+  })
+
+  var keep = function(d){ return active_communities.has(d.community) }
+  community_size_data = full_community_stats.size.filter(keep)
+  heighest_density_data = full_community_stats.density.filter(keep)
+  if (!filtered){
+    heighest_degree_data = full_community_stats.degree.slice()
+    number_of_community_connections_data = full_community_stats.connections.slice()
+    update_slider_ranges()
+    return
+  }
+  var max_degree = {}
+  active_data.forEach(function(d){ max_degree[d.community] = Math.max(max_degree[d.community] || 0, d.centrality) })
+  heighest_degree_data = full_community_stats.degree.filter(keep).map(function(d){
+    return {community: d.community, degree: max_degree[d.community] || 0}
+  })
+  number_of_community_connections_data = full_community_stats.connections.filter(keep).map(function(d){
+    var linked = community_view_mode === 'louvain' ? (community_connections_list[d.community] || []) : []
+    var count = linked.filter(function(c){ return c != d.community && active_communities.has(+c) }).length
+    return {community: d.community, connections: count}
+  })
+  update_slider_ranges()
+}
+
+// round up to the slider step, e.g. 0.4631 -> 0.47 for a step of 0.01
+function round_up_to_step(value, step, decimals){
+  return Number((Math.ceil(value / step) * step).toFixed(decimals))
+}
+
+function set_slider_range(id, max, step){
+  var el = document.getElementById(id)
+  if (!el) return
+  // never below the slider's current value, so an applied threshold stays on the slider
+  el.max = Math.max(max, parseFloat(el.value) || 0)
+  el.step = step
+}
+
+// slider ranges follow the data in view (active subset), so every threshold is reachable
+function update_slider_ranges(){
+  var max_of = function(data, key){ return d3.max(data, function(d){ return d[key] }) || 0 }
+  set_slider_range('Degree', max_of(active_data, 'centrality'), 1)
+  set_slider_range('MostConnected', max_of(active_data, 'centrality'), 1)
+  set_slider_range('Closeness', round_up_to_step(max_of(active_data, 'closeness'), 0.01, 2), 0.01)
+  set_slider_range('Eign', round_up_to_step(max_of(active_data, 'eign'), 0.001, 3), 0.001)
+  set_slider_range('commRangeMinSize', max_of(community_size_data, 'size'), 1)
+  set_slider_range('commRangeMinDensity', round_up_to_step(max_of(heighest_density_data, 'density'), 0.01, 2), 0.01)
+  set_slider_range('commRangeMinDegree', max_of(heighest_degree_data, 'degree'), 1)
+  set_slider_range('commRangeMinConn', max_of(number_of_community_connections_data, 'connections'), 1)
+}
+
+// community order for the current community ranking, active communities only
+function current_community_order(){
+  var keep = function(d){ return active_communities.has(d.community) }
+  if (community_ranking_key === null) return initial_state.community_order.filter(keep)
+  var sources = {
+    size: [community_size_data, 'size'],
+    degree: [heighest_degree_data, 'degree'],
+    density: [heighest_density_data, 'density'],
+    connections: [number_of_community_connections_data, 'connections']
+  }
+  var source = sources[community_ranking_key] || sources.size
+  return source[0].filter(keep).sort(function(a,b){ return d3.descending(a[source[1]], b[source[1]]) })
+}
+
+// lay out the active subset for the current rankings and start a fresh chart (also clears zoom)
+function relayout(){
+  var ordered = []
+  d3.group(active_data, function(d){ return d.community }).forEach(function(nodes){
+    nodes.sort(function(a,b){ return d3.descending(a[node_ranking_key], b[node_ranking_key]) })
+    ordered.push.apply(ordered, nodes)
+  })
+
+  d3.select("#chart").selectAll("svg").remove()
+  d3.select("#legend1").selectAll("canvas").remove()
+  var svg = d3.select("#chart").attr("height", "80vh") // the height set in the dataset pages
+  var bounds = svg.node().getBoundingClientRect()
+  var width = bounds.width
+  var height = bounds.height
+  layout_data = computing_spiral_positions(current_community_order(), ordered, optimal_no_of_nodes, height, width)
+  if (computed_total_community_height > height){
+    height = computed_total_community_height
+    svg.attr("height", height)
+  }
+  initializeSpiralChart(svg, height, width)
+}
+
+function passes_node_filters(d){
+  return d.centrality>=density_var && d.betwness>=betweenness_var && d.eign>=eign_var && d.closeness>=closeness_var
+}
+
+// node filters only hide nodes of the active subset; positions stay where they are
+function apply_node_filters(){
+  global_data = layout_data.filter(passes_node_filters)
+  draw_spiral_community()
+  table.selectAll("tr").remove()
+  show_table_data(global_data)
+  update_counts()
+}
+
+// "Nodes / Edges" header: what is currently drawn
+function update_counts(){
+  var shown = new Set(global_data.map(function(d){ return d.node }))
+  var edge_ends = 0
+  global_data.forEach(function(d){
+    (connections_list[d.node] || []).forEach(function(m){ if (shown.has(+m) && +m != d.node) edge_ends++ })
+  })
+  d3.select("#connection_tooltip").html("<b>Nodes:</b> " + global_data.length + " &emsp; <b>Edges:</b> " + (edge_ends / 2))
+}
+
+// clear the node / community details in the right-hand panel
+function clear_selection_panels(){
+  d3.select("#node_textbox").html("")
+  d3.select("#community_textbox").html("")
+  d3.select("#community_connection_textbox").html("")
+  d3.select("#community_spiral").selectAll("svg").remove()
+  d3.select("#community_barchart").html("")
+  d3.select("#community_piechart").html("")
+  d3.select("#community_histogram").selectAll("svg").remove()
+}
+
+// redraw everything after the active subset changed
+function show_active_subset(){
+  // a found node outside the new subset is no longer selected
+  if (find_node_id != -1 && !active_node_community.has(+find_node_id)){
+    find_node_id = -1
+    setInputValue('textInputNodeId', '')
+  }
+  clear_selection_panels()
+  relayout()
+  apply_node_filters()
+  redraw_community_charts()
+}
+
+function clear_community_filter_inputs(){
+  setInputValue('textInputCommunityFilter', '')
+  setInputValue('commRangeMinSize', 0)
+  setInputValue('commRangeMinSizeText', 0)
+  setInputValue('commRangeMinDensity', 0)
+  setInputValue('commRangeMinDensityText', 0)
+  setInputValue('commRangeMinDegree', 0)
+  setInputValue('commRangeMinDegreeText', 0)
+  setInputValue('commRangeMinConn', 0)
+  setInputValue('commRangeMinConnText', 0)
+}
+
+//community ranking (active communities only)
 function Community_ranking_size(){
-  let height = 1200
-  let width =1200
-  let prepare_data = []
-  unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  console.log("updated_version_degree")
-  unique_communities.forEach(function(entry) {
-    community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-  console.log(prepare_data)
-
-  flag_community_size =1
-  flag_community_degree =0
-  flag_community_density=0
-  flag_community_connections=0
- 
-  community_size_data.sort(function(a,b){return d3.descending(a.size,b.size)})
-
-//sort all other community files based on degree
-let new_heighest_degree_data=[]
-let new_connection_data =[]
-let new_density_data =[]
-
-community_size_data.forEach(function(d){
-  //console.log(d.community)
-  heighest_degree_data .forEach(function(degree_d){
-    if (degree_d.community == d.community)
-    new_heighest_degree_data.push(degree_d)})
-  
-  number_of_community_connections_data.forEach(function(connect_d){
-    if (connect_d.community == d.community)
-    new_connection_data.push(connect_d)})
-
-  heighest_density_data.forEach(function(density_d){
-    if (density_d.community == d.community)
-    new_density_data.push(density_d)})   
-})
-
-heighest_degree_data= new_heighest_degree_data
-number_of_community_connections_data = new_connection_data
-heighest_density_data = new_density_data
-
-console.log(community_size_data)
-console.log(heighest_density_data )
-console.log(heighest_degree_data )
-console.log(number_of_community_connections_data)
-
-
-
-
-  
-  //calculate final x and y position for each point
-  //computing_spiral_positions(center_positions_spiral, data, optimal_no_of_nodes, height, width)
-  //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
-  prepare_data = computing_spiral_positions(community_size_data, prepare_data,optimal_no_of_nodes, height, width)
-  // Update height to match the actual content
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-
-  d3.select("#chart").selectAll("svg").remove()
-
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#community_ranking_tooltip").html("<b>Community Ranking:</b> Size ")
-
+  turnOffMostConnected()
+  community_ranking_key = 'size'
+  relayout()
+  apply_node_filters()
+  d3.select("#community_ranking_tooltip").html("<b>Community ranking:</b> Size ")
 }
-//
+
 function Community_ranking_degree(){
-  flag_community_size =0
-  flag_community_degree =1
-  flag_community_density=0
-  flag_community_connections=0
-
-  let height = 1200
-  let width =1200
-
-  // Pre-sort nodes within each community (same pattern as Community_ranking_size)
-  let prepare_data = []
-  let unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  unique_communities.forEach(function(entry) {
-    let community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-
-  heighest_degree_data.sort(function(a,b){return d3.descending(a.degree,b.degree)})
-  console.log(heighest_degree_data)
-
-  //sort all other community files based on degree
-  let new_size_data=[]
-  let new_connection_data =[]
-  let new_density_data =[]
-
-  heighest_degree_data.forEach(function(d){
-    community_size_data.forEach(function(size_d){
-      if (size_d.community == d.community)
-        new_size_data.push(size_d)})
-    number_of_community_connections_data.forEach(function(connect_d){
-      if (connect_d.community == d.community)
-        new_connection_data.push(connect_d)})
-    heighest_density_data.forEach(function(density_d){
-      if (density_d.community == d.community)
-        new_density_data.push(density_d)})
-  })
-
-  community_size_data= new_size_data
-  number_of_community_connections_data = new_connection_data
-  heighest_density_data = new_density_data
-
-  //calculate final x and y position for each point
-  prepare_data = computing_spiral_positions(heighest_degree_data, prepare_data, optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-  d3.select("#chart").selectAll("svg").remove()
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#community_ranking_tooltip").html("<b>Community Ranking:</b> Heighest Degree ")
+  turnOffMostConnected()
+  community_ranking_key = 'degree'
+  relayout()
+  apply_node_filters()
+  d3.select("#community_ranking_tooltip").html("<b>Community ranking:</b> Max degree ")
 }
+
 function Community_ranking_density(){
-  flag_community_size =0
-  flag_community_degree =0
-  flag_community_density=1
-  flag_community_connections=0
-
-  let height = 1200
-  let width =1200
-
-  // Pre-sort nodes within each community (same pattern as Community_ranking_size)
-  let prepare_data = []
-  let unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  unique_communities.forEach(function(entry) {
-    let community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-
-  heighest_density_data.sort(function(a,b){return d3.descending(a.density,b.density)})
-  console.log(heighest_density_data)
-
-  //sort all other community files based on edge-density
-  let new_size_data=[]
-  let new_connection_data =[]
-  let new_heighest_degree_data = []
-
-  heighest_density_data.forEach(function(d){
-    community_size_data.forEach(function(size_d){
-      if (size_d.community == d.community)
-        new_size_data.push(size_d)})
-    number_of_community_connections_data.forEach(function(connect_d){
-      if (connect_d.community == d.community)
-        new_connection_data.push(connect_d)})
-    heighest_degree_data.forEach(function(degree_d){
-      if (degree_d.community == d.community)
-        new_heighest_degree_data.push(degree_d)})
-  })
-
-  community_size_data= new_size_data
-  number_of_community_connections_data = new_connection_data
-  heighest_degree_data = new_heighest_degree_data
-
-  //calculate final x and y position for each point
-  prepare_data = computing_spiral_positions(heighest_density_data, prepare_data, optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-  d3.select("#chart").selectAll("svg").remove()
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#community_ranking_tooltip").html("<b>Community Ranking:</b> Edge-Density ")
+  turnOffMostConnected()
+  community_ranking_key = 'density'
+  relayout()
+  apply_node_filters()
+  d3.select("#community_ranking_tooltip").html("<b>Community ranking:</b> Edge density ")
 }
+
 function Community_ranking_connection(){
-  flag_community_size =0
-  flag_community_degree =0
-  flag_community_density=0
-  flag_community_connections=1
-
-  let height = 1200
-  let width =1200
-
-  // Pre-sort nodes within each community (same pattern as Community_ranking_size)
-  let prepare_data = []
-  let unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  unique_communities.forEach(function(entry) {
-    let community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-
-  number_of_community_connections_data.sort(function(a,b){return d3.descending(a.connections,b.connections)})
-  console.log(number_of_community_connections_data)
-
-  //sort all other community files based on community connections
-  let new_size_data=[]
-  let new_density_data =[]
-  let new_heighest_degree_data = []
-
-  number_of_community_connections_data.forEach(function(d){
-    community_size_data.forEach(function(size_d){
-      if (size_d.community == d.community)
-        new_size_data.push(size_d)})
-    heighest_density_data.forEach(function(density_d){
-      if (density_d.community == d.community)
-        new_density_data.push(density_d)})
-    heighest_degree_data.forEach(function(degree_d){
-      if (degree_d.community == d.community)
-        new_heighest_degree_data.push(degree_d)})
-  })
-
-  community_size_data= new_size_data
-  heighest_density_data = new_density_data
-  heighest_degree_data = new_heighest_degree_data
-
-  //calculate final x and y position for each point
-  prepare_data = computing_spiral_positions(number_of_community_connections_data, prepare_data, optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-  d3.select("#chart").selectAll("svg").remove()
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#community_ranking_tooltip").html("<b>Community Ranking:</b> Community Connections ")
+  turnOffMostConnected()
+  community_ranking_key = 'connections'
+  relayout()
+  apply_node_filters()
+  d3.select("#community_ranking_tooltip").html("<b>Community ranking:</b> Connections ")
 }
 
 
 
 
-//most connected node identification
+//most connected node identification (nodes currently in view only)
 //degree range_bar
 function MostConnectedNodes(val) {
+  // one mode at a time: Most Connected clears Find Node
+  find_node_id = -1
+  setInputValue('textInputNodeId', '')
+
+  // slider at 0 means Most Connected is off
+  if (+val === 0) {
+    turnOffMostConnected()
+    apply_node_filters()
+    return
+  }
+
   //first set the flag
   flag_most_connected_nodes = 1
   document.getElementById('textInputConnecteddeg').value=val;
-  //node data that are most connected
-  most_connected_nodes_data = global_data_unchanged.filter(function(d){
+  // nodes in view: active communities with the node filters applied
+  // (degree is counted inside the active subset)
+  var nodes_in_view = layout_data.filter(passes_node_filters)
+  most_connected_nodes_data = nodes_in_view.filter(function(d){
         return d.centrality>=val
         })
   //most connected communities
-  var list_of_communities = most_connected_nodes_data.map(function(d){return d.community})
-  console.log([... new Set(list_of_communities)])
-  var list_of_most_connected_communities = [... new Set(list_of_communities)]
+  var list_of_most_connected_communities = [... new Set(most_connected_nodes_data.map(function(d){return d.community}))]
   //filter the community data since you also want to show those communities
-  var most_connected_community_data = global_data_unchanged.filter(function(d){
-    if(list_of_most_connected_communities.includes(d.community))
-      return d
+  global_data = nodes_in_view.filter(function(d){
+    return list_of_most_connected_communities.includes(d.community)
   })
-  console.log(most_connected_community_data)
-  global_data = most_connected_community_data
+  var list_of_most_connected_nodes = new Set(most_connected_nodes_data.map(function(d){return d.node}))
 
-
-
-  console.log(most_connected_nodes_data)
-  var list_of_most_connected_nodes = most_connected_nodes_data.map(function(d){return d.node})
-  console.log(list_of_most_connected_nodes)
-
-
-
-
- // g.call(brush.move, null);
   g.select(".brush").call(brush.move, null);
   draw_spiral_community()
+  update_counts()
 
   d3.selectAll("circle")
 .attr("opacity", function(d){
-    if(list_of_most_connected_nodes.includes(d.node) ) return 1
+    if(d && list_of_most_connected_nodes.has(d.node) ) return 1
     else return .05} )
 
 }
 
-//ranking button
+//ranking button: order of nodes inside each active community
+function rank_nodes_by(key, label){
+  turnOffMostConnected()
+  node_ranking_key = key
+  relayout()
+  apply_node_filters()
+  d3.select("#ranking_tooltip").html("<b>Node ranking:</b> " + label + " ")
+}
+
 //ranking based on degree
 function degree_ranking(){
-  let height = 1200
-  let width =1200
-  let prepare_data = []
-  unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  console.log("updated_version_degree")
-  unique_communities.forEach(function(entry) {
-    community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-  console.log(prepare_data)
-
-  let positions_spiral
-  if (flag_community_size ==1)
-    positions_spiral = community_size_data
-  else if (flag_community_degree ==1)
-    positions_spiral = heighest_degree_data
-  else if (flag_community_density==1)
-    positions_spiral = heighest_density_data
-  //else if (flag_community_connections==1)
-    //positions_spiral = community_connection_data
-
-  //calculate final x and y position for each point
-  //computing_spiral_positions(center_positions_spiral, data, optimal_no_of_nodes, height, width)
-  //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-
-  d3.select("#chart").select("svg").remove()
-
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#ranking_tooltip").html("<b>Ranking:</b> Degree ")
-
+  rank_nodes_by('centrality', 'Degree')
 }
 
 // ranking based on closeness
 function closeness_ranking(){
-  let height = 1200
-  let width =1200
-  let prepare_data = []
-  unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  console.log("updated_version_closeness")
-  unique_communities.forEach(function(entry) {
-    community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.closeness,b.closeness)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-  console.log(prepare_data)
-
-  let positions_spiral
-  if (flag_community_size ==1)
-    positions_spiral = community_size_data
-  else if (flag_community_degree ==1)
-    positions_spiral = heighest_degree_data
-  else if (flag_community_density==1)
-    positions_spiral = heighest_density_data
-
-  //calculate final x and y position for each point
-  //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-
-  d3.select("#chart").select("svg").remove()
-
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#ranking_tooltip").html("<b>Ranking:</b> Closeness ")
-
+  rank_nodes_by('closeness', 'Closeness')
 }
 
 //ranking based on eign centrality
 function eign_ranking(){
-  let height = 1200
-  let width =1200
-  let prepare_data = []
-  unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  console.log("updated_version_eign")
-  unique_communities.forEach(function(entry) {
-    community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.eign,b.eign)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-  console.log(prepare_data)
-
-  let positions_spiral
-  if (flag_community_size ==1)
-    positions_spiral = community_size_data
-  else if (flag_community_degree ==1)
-    positions_spiral = heighest_degree_data
-  else if (flag_community_density==1)
-    positions_spiral = heighest_density_data
-
-  //calculate final x and y position for each point
-  //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-
-  d3.select("#chart").select("svg").remove()
-
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#ranking_tooltip").html("<b>Ranking:</b> Eigen Centrality ")
-
+  rank_nodes_by('eign', 'Eigenvector')
 }
 
 //ranking based on betweenness centrality
 function between_ranking(){
-  let height = 1200
-  let width =1200
-  let prepare_data = []
-  unique_communities = new Set(global_data_unchanged.map(function(d){return d.community}))
-  console.log("updated_version_betweenness")
-  unique_communities.forEach(function(entry) {
-    community_data = global_data_unchanged.filter(function(d){ return d.community == entry});
-    community_data.sort(function(a,b){return d3.descending(a.betwness,b.betwness)})
-    prepare_data.push.apply(prepare_data,community_data)
-  })
-  console.log(prepare_data)
-
-  let positions_spiral
-  if (flag_community_size ==1)
-    positions_spiral = community_size_data
-  else if (flag_community_degree ==1)
-    positions_spiral = heighest_degree_data
-  else if (flag_community_density==1)
-    positions_spiral = heighest_density_data
-
-  //calculate final x and y position for each point
-  //prepare_data = computing_spiral_positions(center_positions_spiral, prepare_data, height, width)
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data,optimal_no_of_nodes, height, width)
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data
-  global_data_unchanged = prepare_data
-
-
-  d3.select("#chart").select("svg").remove()
-
-
-  //assign height and width of svg
-  let svg = d3.select("#chart")
-  initializeSpiralChart(svg, height, width)
-  draw_spiral_community()
-  d3.select("#ranking_tooltip").html("<b>Ranking:</b> Betweenness ")
-
+  rank_nodes_by('betwness', 'Betweenness')
 }
 
 //radius range bar
@@ -478,71 +318,41 @@ function updateTextInputRadius(val) {
   show_table_data(global_data)
 }
 
-//degree range_bar
+//degree range_bar (node filters apply inside the active subset)
 function updateTextInputdeg(val) {
-    document.getElementById('textInputdeg').value=val;
-    density_var = val;
-    console.log(val)
-    global_data = global_data_unchanged.filter(function(d){
-          return d.centrality>=density_var && d.betwness>=betweenness_var && d.eign>=eign_var && d.closeness>=closeness_var
-          })
-    console.log(global_data)
-   // g.call(brush.move, null);
-    g.select(".brush").call(brush.move, null);
-    draw_spiral_community()
-    //show only selected community in table
-    table.selectAll("tr").remove()
-    show_table_data(global_data)
-  }
+  turnOffMostConnected()
+  document.getElementById('textInputdeg').value=val;
+  density_var = val;
+  apply_node_filters()
+}
 
+//betweenness range_bar
+function updateTextInputbet(val) {
+  turnOffMostConnected()
+  document.getElementById('textInputbet').value=val;
+  betweenness_var = val
+  apply_node_filters()
+}
 
-  //betweenness range_bar
-  function updateTextInputbet(val) {
-    document.getElementById('textInputbet').value=val;
-    betweenness_var = val
-    global_data = global_data_unchanged.filter(function(d){
-        return d.centrality>=density_var && d.betwness>=betweenness_var && d.eign>=eign_var && d.closeness>=closeness_var
-        })
-  console.log(global_data)
-  g.select(".brush").call(brush.move, null);
-  draw_spiral_community()
-  //show only selected community in table
-  table.selectAll("tr").remove()
-  show_table_data(global_data)
-  }
+//eign range_bar
+function updateTextInputeig(val) {
+  turnOffMostConnected()
+  document.getElementById('textInputeig').value=val;
+  eign_var = val ;
+  apply_node_filters()
+}
 
-
-  //eign range_bar
-  function updateTextInputeig(val) {
-    document.getElementById('textInputeig').value=val;
-    eign_var = val ;
-    global_data = global_data_unchanged.filter(function(d){
-        return d.centrality>=density_var && d.betwness>=betweenness_var && d.eign>=eign_var && d.closeness>=closeness_var
-        })
-  console.log(global_data)
-  g.select(".brush").call(brush.move, null);
-  draw_spiral_community()
-  //show only selected community in table
-  table.selectAll("tr").remove()
-  show_table_data(global_data)
-  }
 //closeness range_bar
-  function updateTextInputclo(val) {
-    document.getElementById('textInputclo').value=val;
-    closeness_var =val
-    global_data = global_data_unchanged.filter(function(d){
-        return d.centrality>=density_var && d.betwness>=betweenness_var && d.eign>=eign_var && d.closeness>=closeness_var
-        })
-  console.log(global_data)
-  g.select(".brush").call(brush.move, null);
-  draw_spiral_community()
-  //show only selected community in table
-  table.selectAll("tr").remove()
-  show_table_data(global_data)
-  }
+function updateTextInputclo(val) {
+  turnOffMostConnected()
+  document.getElementById('textInputclo').value=val;
+  closeness_var =val
+  apply_node_filters()
+}
 
 //colorcoding
 function colorNodesByDensity(){
+  turnOffMostConnected()
    densityColFlag = 1
    degreeColFlag = 0
    closenessColFlag = 0
@@ -550,10 +360,11 @@ function colorNodesByDensity(){
    eignColFlag = 0
    g.select(".brush").call(brush.move, null);
    draw_spiral_community()
-   d3.select("#color_tooltip").html("<b>Color-Coding:</b> Density ")
+   d3.select("#color_tooltip").html("<b>Color:</b> Edge density ")
 }
 
 function colorNodesByDegree(){
+  turnOffMostConnected()
   densityColFlag = 0
   degreeColFlag = 1
   closenessColFlag = 0
@@ -561,10 +372,11 @@ function colorNodesByDegree(){
   eignColFlag = 0
   g.select(".brush").call(brush.move, null);
   draw_spiral_community()
-  d3.select("#color_tooltip").html("<b>Color-Coding:</b> Degree ")
+  d3.select("#color_tooltip").html("<b>Color:</b> Degree ")
 }
 
 function colorNodesByCloseness(){
+  turnOffMostConnected()
   densityColFlag = 0
   degreeColFlag = 0
   closenessColFlag = 1
@@ -572,10 +384,11 @@ function colorNodesByCloseness(){
   eignColFlag = 0
   g.select(".brush").call(brush.move, null);
   draw_spiral_community()
-  d3.select("#color_tooltip").html("<b>Color-Coding:</b> Closeness ")
+  d3.select("#color_tooltip").html("<b>Color:</b> Closeness ")
 }
 
 function colorNodesByBetweeness(){
+  turnOffMostConnected()
   densityColFlag = 0
   degreeColFlag = 0
   closenessColFlag = 0
@@ -583,10 +396,11 @@ function colorNodesByBetweeness(){
   eignColFlag = 0
   g.select(".brush").call(brush.move, null);
   draw_spiral_community()
-  d3.select("#color_tooltip").html("<b>Color-Coding:</b> Betweenness ")
+  d3.select("#color_tooltip").html("<b>Color:</b> Betweenness ")
 }
 
 function colorNodesByEign(){
+  turnOffMostConnected()
   densityColFlag = 0
   degreeColFlag = 0
   closenessColFlag = 0
@@ -594,7 +408,7 @@ function colorNodesByEign(){
   eignColFlag = 1
   g.select(".brush").call(brush.move, null);
   draw_spiral_community()
-  d3.select("#color_tooltip").html("<b>Color-Coding:</b> Eigen Centrality ")
+  d3.select("#color_tooltip").html("<b>Color:</b> Eigenvector ")
 
 }
 
@@ -604,32 +418,48 @@ function colorNodesByEign(){
     var node_community;
     var node_density,
     node_centrality,
-    node_betweness,
     node_closeness,
     node_eign;
 
-    find_node_id = document.getElementById('textInputNodeId').value
+    var input_text = document.getElementById('textInputNodeId').value.trim()
+    var searched_node = /^\d+$/.test(input_text) ? +input_text : null
+    if (searched_node === null){
+      showStatusMessage(input_text === '' ? 'Enter a node ID' : 'Node ' + input_text + ' not found', 'warning')
+      return
+    }
+    // only nodes in view (active communities, node filters applied) can be found
+    var nodes_in_view = layout_data.filter(passes_node_filters)
+    if (!nodes_in_view.some(function(d){ return d.node == searched_node })){
+      var node_exists = global_data_unchanged.some(function(d){ return d.node == searched_node })
+      showStatusMessage(node_exists ? 'Node ' + input_text + ' is not in the current filtered view' : 'Node ' + input_text + ' not found', 'warning')
+      return
+    }
+
+    // one mode at a time: finding a node turns Most Connected off
+    turnOffMostConnected()
+    find_node_id = searched_node
     g.select(".brush").call(brush.move, null);
     draw_spiral_community()
 
 
 
-    //search data to find the node and then community and denstity of searched node
-    for(i=0; i<global_data_unchanged.length; i++)
+    //search the nodes in view to find the node and then community and denstity of searched node
+    var found_node
+    for(i=0; i<global_data.length; i++)
     {
-      if (global_data_unchanged[i].node == find_node_id)
+      if (global_data[i].node == find_node_id)
       {
-        node_community = global_data_unchanged[i].community
-        node_density = global_data_unchanged[i].density
-        node_centrality = global_data_unchanged[i].centrality
-        node_betweness = global_data_unchanged[i].betwness
-        node_closeness = global_data_unchanged[i].closeness
-        node_eign = global_data_unchanged[i].eign
+        found_node = global_data[i]
+        node_community = global_data[i].community
+        node_density = global_data[i].density
+        node_centrality = global_data[i].centrality
+        node_closeness = global_data[i].closeness
+        node_eign = global_data[i].eign
         break;
       }
     }
-    //highlighting the node and commun ijty in seperate window
-    var node_community_data = global_data_unchanged.filter(function(client){return client.community==node_community})
+    //highlighting the node and commun ijty in seperate window (nodes in view only)
+    var node_community_data = global_data.filter(function(client){return client.community==node_community})
     node_community_data.sort(function(a,b){return d3.descending(a.centrality,b.centrality)})
     find_node_draw_spiral(node_community_data)
     //node textbox
@@ -644,19 +474,18 @@ function colorNodesByEign(){
   // append the svg object to the body of the page
     var featureHtml = "";
     if (Object.keys(nodeFeatureLookup).length > 0) {
-      var colLabel = nodeFeatureColumnName ? (nodeFeatureColumnName.charAt(0).toUpperCase() + nodeFeatureColumnName.slice(1).replace(/_/g, ' ')) : "Feature";
+      var colLabel = feature_column_label();
       var fieldVal = nodeFeatureLookup.hasOwnProperty(+find_node_id) ? nodeFeatureLookup[+find_node_id] : -1;
       var fieldName = typeof FIELD_NAMES !== 'undefined' && FIELD_NAMES.hasOwnProperty(fieldVal) ? FIELD_NAMES[fieldVal] : (fieldVal === -1 ? "Unknown" : fieldVal);
       featureHtml = "<b>" + colLabel + ":</b> " + fieldName + "<br/>";
     }
 
     var svg = d3.select("#node_textbox")
-      .html("<br/><b>NODE DATA</b><br/><b>Community: </b>"+ node_community +"<br/>" + 
+      .html("<br/><b>Found node:</b> " + find_node_id + "<br/><b>Community: </b>"+ node_community +"<br/>" + 
       featureHtml +
-      "<b>Degree:</b> "+ node_centrality + "<br/>" +
-       "<b>Betweeness:</b> " + node_betweness + "<br/>" +
-       "<b>Closeness:</b> " + node_closeness + "<br/>" +
-       "<b>Eign:</b> " + node_eign )
+      "<b>Degree:</b> "+ node_centrality + degree_label_suffix(found_node) + "<br/>" +
+       "<b>Closeness:</b> " + node_closeness + full_network_suffix() + "<br/>" +
+       "<b>Eigenvector:</b> " + node_eign + full_network_suffix() )
        .style("font-size", "12px")
     //highlight the node in table also
     //introduce the reset button to reset the entire visualization again
@@ -669,212 +498,194 @@ function colorNodesByEign(){
 
 
 //show and hide edges button
+  // show / hide the inter-community arcs (hovering a community still shows its own arcs)
   function edge_visualization(){
-    let opa =d3.selectAll(".spiral_edges").style("stroke-opacity")
-    //console.log(active_community)
-    if (opa ==1){
-      d3.selectAll(".spiral_edges")
-      .style("stroke-opacity", 0)
-    }else{
-      d3.selectAll(".spiral_edges")
-      .style("stroke-opacity", 1)
-
-    }
+    show_background_arcs = !show_background_arcs
+    reset_community_arcs()
   }
 
 
 
-  //show and hide edges button
-  function reset_button(){
-    //reset find node functionality
-    find_node_id = -1
-    document.getElementById('textInputNodeId').value = -1
+  // set an input's value only if the element exists, so a missing id can't abort reset
+  function setInputValue(id, value){
+    var el = document.getElementById(id)
+    if (el) el.value = value
+  }
 
-    //most connected node functionality reset
+  // brief on-screen message, e.g. "View reset" (success) or "Node 99999 not found" (warning)
+  var statusMessageTimer
+  function showStatusMessage(text, variant){
+    var el = document.getElementById('status_message')
+    if (!el){
+      el = document.createElement('div')
+      el.id = 'status_message'
+      el.setAttribute('role', 'status')
+      el.setAttribute('aria-live', 'polite')
+      el.style.cssText = 'position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:2000; margin:0; display:none;'
+      document.body.appendChild(el)
+    }
+    el.className = 'alert alert-' + (variant || 'success') + ' py-1 px-3 shadow-sm'
+    el.textContent = text
+    el.style.display = 'block'
+    clearTimeout(statusMessageTimer)
+    statusMessageTimer = setTimeout(function(){ el.style.display = 'none' }, 2500)
+  }
+
+  // Most Connected and Find Node are used one at a time, and any other control
+  // (colour, filter, ranking, view) also ends Most Connected mode
+  function turnOffMostConnected(){
+    if (flag_most_connected_nodes) global_data = layout_data.filter(passes_node_filters)
     flag_most_connected_nodes = 0
-    document.getElementById('textInputConnecteddeg').value= 0
-    document.getElementById('MostConnected').value= 0
-
-    // reseting filtering values
-    //degree
-    document.getElementById('textInputdeg').value= 0
-    document.getElementById('Degree').value= 0
-    //closeness
-    document.getElementById('textInputclo').value= 0
-    document.getElementById('Closeness').value= 0
-    //eign
-    document.getElementById('textInputeig').value= 0
-    document.getElementById('Eign').value= 0
-    //between
-    document.getElementById('textInputbet').value= 0
-    document.getElementById('Betweenness').value= 0
-
-    //reset community filter
-    document.getElementById('textInputCommunityFilter').value = ''
-
-    //reset community range filter
-    if (document.getElementById('commRangeMinSize')) {
-      document.getElementById('commRangeMinSize').value = '';
-      document.getElementById('commRangeMaxSize').value = '';
-      document.getElementById('commRangeMinDensity').value = '';
-      document.getElementById('commRangeMaxDensity').value = '';
-      document.getElementById('commRangeMinDegree').value = '';
-      document.getElementById('commRangeMaxDegree').value = '';
-      document.getElementById('commRangeMinConn').value = '';
-      document.getElementById('commRangeMaxConn').value = '';
-    }
-
-    //clearing the highlight window
-    d3.select("#node_textbox").html("")
-    d3.select("#community_textbox").html("")
-    d3.select("#community_histogram").select("svg").remove()
-    d3.select("#community_barchart").html("")
-    d3.select("#community_spiral").select("svg").remove()
-
-
-    global_data = global_data_unchanged
-    g.select(".brush").call(brush.move, null);
-    draw_spiral_community()
-    //show only selected community in table
-    table.selectAll("tr").remove()
-    show_table_data(global_data)
-
+    most_connected_nodes_data = undefined
+    setInputValue('MostConnected', 0)
+    setInputValue('textInputConnecteddeg', 0)
   }
 
-  // Community filter: show only selected communities
+  //reset button: restore the exact page-load view
+  function reset_button(){
+    if (!initial_state) return // data not loaded yet
+
+    //community view: restore Louvain communities and densities by node id
+    global_data_unchanged.forEach(function(d){
+      var attrs = initial_state.node_attrs[d.node]
+      if (attrs){
+        d.community = attrs.community
+        d.density = attrs.density
+      }
+    })
+    community_view_mode = 'louvain'
+    // clear the metadata-view backup so the next switch takes a fresh one
+    original_community_backup = null
+    original_density_backup = null
+    original_community_size_data = null
+    original_heighest_degree_data = null
+    original_heighest_density_data = null
+    original_number_of_community_connections_data = null
+
+    //community stats and rankings
+    full_community_stats = {
+      size: initial_state.size.slice(),
+      degree: initial_state.degree.slice(),
+      density: initial_state.density.slice(),
+      connections: initial_state.connections.slice()
+    }
+    community_ranking_key = null
+    node_ranking_key = 'centrality'
+
+    //node filters
+    density_var = 0
+    eign_var = 0
+    betweenness_var = 0
+    closeness_var = 0
+
+    //find node and most connected nodes
+    find_node_id = -1
+    turnOffMostConnected()
+
+    //color-coding back to density
+    densityColFlag = 1
+    degreeColFlag = 0
+    closenessColFlag = 0
+    betweennessColFlag = 0
+    eignColFlag = 0
+
+    //zoom and hover state
+    brushFlag = 0
+    clearTimeout(idleTimeout)
+    idleTimeout = null
+    activeCommunity = 200
+
+    //sidebar controls (sliders get '0', never '' which jumps to the midpoint)
+    setInputValue('textInputNodeId', '')
+    setInputValue('textInputdeg', 0)
+    setInputValue('Degree', 0)
+    setInputValue('textInputclo', 0)
+    setInputValue('Closeness', 0)
+    setInputValue('textInputeig', 0)
+    setInputValue('Eign', 0)
+    setInputValue('textInputbet', 0)
+    setInputValue('Betweenness', 0)
+    setInputValue('textInputCommunityFilter', '')
+    setInputValue('commRangeMinSize', 0)
+    setInputValue('commRangeMinSizeText', 0)
+    setInputValue('commRangeMinDensity', 0)
+    setInputValue('commRangeMinDensityText', 0)
+    setInputValue('commRangeMinDegree', 0)
+    setInputValue('commRangeMinDegreeText', 0)
+    setInputValue('commRangeMinConn', 0)
+    setInputValue('commRangeMinConnText', 0)
+
+    //clearing the highlight window and hover highlights
+    clear_selection_panels()
+    div.style("opacity", 0)
+    d3.selectAll(".bar-feature-tooltip").style("opacity", 0)
+    d3.selectAll(".barLight").attr("class", "bar")
+
+    //complete dataset back in page-load order; the community filter is cleared
+    global_data_unchanged.sort(function(a,b){return d3.descending(a.node, b.node)})
+    set_active_communities(all_community_ids())
+    relayout()
+    apply_node_filters()
+    redraw_community_charts()
+
+    //header labels
+    d3.select("#ranking_tooltip").html(initial_state.ranking_label)
+    d3.select("#community_ranking_tooltip").html(initial_state.community_ranking_label)
+
+    showStatusMessage('View reset', 'success')
+  }
+
+  // Community filter: keep only the selected communities of the current subset
   function applyCommunityFilter() {
     var filterInput = document.getElementById('textInputCommunityFilter').value.trim();
-    if (!filterInput) return;
-
-    // Parse comma-separated community IDs
-    var selectedCommunities = filterInput.split(',').map(function(s) { return +s.trim(); }).filter(function(n) { return !isNaN(n); });
-    if (selectedCommunities.length === 0) return;
-
-    console.log("Filtering to communities:", selectedCommunities);
-
-    let height = 1200;
-    let width = 1200;
-
-    // Filter node data to only include selected communities
-    var filteredData = global_data_unchanged.filter(function(d) {
-      return selectedCommunities.includes(d.community);
-    });
-
-    if (filteredData.length === 0) {
-      alert("No nodes found in the specified communities.");
+    var requested = filterInput.split(',').map(function(s) { return s.trim(); })
+      .filter(function(s) { return s !== '' && !isNaN(+s); }).map(Number);
+    if (requested.length === 0) {
+      showStatusMessage('Enter community IDs, e.g. 0,1,5', 'warning');
       return;
     }
 
-    // Filter community ranking data to only include selected communities
-    var filtered_community_size = community_size_data.filter(function(d) {
-      return selectedCommunities.includes(d.community);
-    });
-
-    // Sort by current ranking
-    let positions_spiral;
-    if (flag_community_size == 1)
-      positions_spiral = filtered_community_size;
-    else if (flag_community_degree == 1) {
-      positions_spiral = heighest_degree_data.filter(function(d) {
-        return selectedCommunities.includes(d.community);
-      });
-    } else if (flag_community_density == 1) {
-      positions_spiral = heighest_density_data.filter(function(d) {
-        return selectedCommunities.includes(d.community);
-      });
-    } else if (flag_community_connections == 1) {
-      positions_spiral = number_of_community_connections_data.filter(function(d) {
-        return selectedCommunities.includes(d.community);
-      });
-    } else {
-      positions_spiral = filtered_community_size;
+    // a further filter narrows the current subset
+    var kept = requested.filter(function(c) { return active_communities.has(c); });
+    var ignored = requested.filter(function(c) { return !active_communities.has(c); });
+    if (kept.length === 0) {
+      showStatusMessage('None of these communities are in the current view', 'warning');
+      return;
     }
 
-    // Sort nodes within each community by degree
-    let prepare_data = [];
-    selectedCommunities.forEach(function(comm) {
-      var comm_data = filteredData.filter(function(d) { return d.community == comm; });
-      comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
-      prepare_data.push.apply(prepare_data, comm_data);
-    });
-
-    // Recompute positions
-    prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
-    height = Math.max(height, computed_total_community_height || height);
-    global_data = prepare_data;
-
-    d3.select("#chart").selectAll("svg").remove();
-
-    let svg = d3.select("#chart");
-    initializeSpiralChart(svg, height, width);
-    draw_spiral_community();
-
-    // Update table
-    table.selectAll("tr").remove();
-    show_table_data(global_data);
+    turnOffMostConnected();
+    set_active_communities(kept);
+    show_active_subset();
+    if (ignored.length > 0)
+      showStatusMessage('Not in the current view, ignored: ' + ignored.join(', '), 'warning');
   }
 
-  // Reset community filter
+  // Reset community filter: back to all communities (rankings, colouring and node filters stay)
   function resetCommunityFilter() {
-    document.getElementById('textInputCommunityFilter').value = '';
-    global_data = global_data_unchanged;
-    
-    let height = 1200;
-    let width = 1200;
+    clearCommunityFilters()
+  }
 
-    let positions_spiral;
-    if (flag_community_size == 1)
-      positions_spiral = community_size_data;
-    else if (flag_community_degree == 1)
-      positions_spiral = heighest_degree_data;
-    else if (flag_community_density == 1)
-      positions_spiral = heighest_density_data;
-    else if (flag_community_connections == 1)
-      positions_spiral = number_of_community_connections_data;
-    else
-      positions_spiral = community_size_data;
-
-    let prepare_data = [];
-    let unique_communities = new Set(global_data_unchanged.map(function(d) { return d.community; }));
-    unique_communities.forEach(function(entry) {
-      var comm_data = global_data_unchanged.filter(function(d) { return d.community == entry; });
-      comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
-      prepare_data.push.apply(prepare_data, comm_data);
-    });
-
-    prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
-    height = Math.max(height, computed_total_community_height || height);
-    global_data = prepare_data;
-
-    d3.select("#chart").selectAll("svg").remove();
-    let svg = d3.select("#chart");
-    initializeSpiralChart(svg, height, width);
-    draw_spiral_community();
-
-    table.selectAll("tr").remove();
-    show_table_data(global_data);
+  function clearCommunityFilters() {
+    turnOffMostConnected()
+    clear_community_filter_inputs()
+    set_active_communities(all_community_ids())
+    show_active_subset()
   }
 
 
 // ============================================================
 // Community Range Filter
-// Show only communities whose size, density, max-degree, and
-// connections fall within the ranges set by the user.
+// Keep only the communities of the current subset whose size, density,
+// max-degree, and connections (counted inside the subset) pass the minimums.
 // ============================================================
 
 function applyCommunityRangeFilter() {
   var minSize = parseFloat(document.getElementById('commRangeMinSize').value) || 0;
-  var maxSize = Infinity;
   var minDensity = parseFloat(document.getElementById('commRangeMinDensity').value) || 0;
-  var maxDensity = Infinity;
   var minDegree = parseFloat(document.getElementById('commRangeMinDegree').value) || 0;
-  var maxDegree = Infinity;
   var minConn = parseFloat(document.getElementById('commRangeMinConn').value) || 0;
-  var maxConn = Infinity;
 
-  // Build lookup maps for fast access
-  var sizeMap = {};
-  community_size_data.forEach(function(d) { sizeMap[d.community] = d.size; });
+  // the stats arrays only hold the active communities
   var densityMap = {};
   heighest_density_data.forEach(function(d) { densityMap[d.community] = d.density; });
   var degreeMap = {};
@@ -882,124 +693,26 @@ function applyCommunityRangeFilter() {
   var connMap = {};
   number_of_community_connections_data.forEach(function(d) { connMap[d.community] = d.connections; });
 
-  // Find communities that pass all filters
-  var passingCommunities = [];
-  community_size_data.forEach(function(d) {
+  var passingCommunities = community_size_data.filter(function(d) {
     var comm = d.community;
-    var s = sizeMap[comm] !== undefined ? sizeMap[comm] : 0;
-    var den = densityMap[comm] !== undefined ? densityMap[comm] : 0;
-    var deg = degreeMap[comm] !== undefined ? degreeMap[comm] : 0;
-    var con = connMap[comm] !== undefined ? connMap[comm] : 0;
-
-    if (s >= minSize && s <= maxSize &&
-        den >= minDensity && den <= maxDensity &&
-        deg >= minDegree && deg <= maxDegree &&
-        con >= minConn && con <= maxConn) {
-      passingCommunities.push(comm);
-    }
-  });
+    return d.size >= minSize &&
+      (densityMap[comm] || 0) >= minDensity &&
+      (degreeMap[comm] || 0) >= minDegree &&
+      (connMap[comm] || 0) >= minConn;
+  }).map(function(d) { return d.community; });
 
   if (passingCommunities.length === 0) {
-    alert("No communities match the specified ranges.");
+    showStatusMessage('No communities in the current view match these ranges', 'warning');
     return;
   }
 
-  console.log("Community range filter — passing communities:", passingCommunities);
-
-  let height = 1200;
-  let width = 1200;
-
-  // Filter node data to only include passing communities
-  var filteredData = global_data_unchanged.filter(function(d) {
-    return passingCommunities.includes(d.community);
-  });
-
-  // Filter community ranking arrays
-  var filtered_size = community_size_data.filter(function(d) {
-    return passingCommunities.includes(d.community);
-  });
-
-  // Select the right ordering based on current ranking flag
-  var positions_spiral;
-  if (flag_community_size == 1)
-    positions_spiral = filtered_size;
-  else if (flag_community_degree == 1)
-    positions_spiral = heighest_degree_data.filter(function(d) { return passingCommunities.includes(d.community); });
-  else if (flag_community_density == 1)
-    positions_spiral = heighest_density_data.filter(function(d) { return passingCommunities.includes(d.community); });
-  else if (flag_community_connections == 1)
-    positions_spiral = number_of_community_connections_data.filter(function(d) { return passingCommunities.includes(d.community); });
-  else
-    positions_spiral = filtered_size;
-
-  // Sort nodes within each community by degree
-  var prepare_data = [];
-  passingCommunities.forEach(function(comm) {
-    var comm_data = filteredData.filter(function(d) { return d.community == comm; });
-    comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
-    prepare_data.push.apply(prepare_data, comm_data);
-  });
-
-  // Recompute positions
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data;
-
-  d3.select("#chart").selectAll("svg").remove();
-  var svg = d3.select("#chart");
-  initializeSpiralChart(svg, height, width);
-  draw_spiral_community();
-
-  table.selectAll("tr").remove();
-  show_table_data(global_data);
+  turnOffMostConnected();
+  set_active_communities(passingCommunities);
+  show_active_subset();
 }
 
 function resetCommunityRangeFilter() {
-  document.getElementById('commRangeMinSize').value = '0';
-  if(document.getElementById('commRangeMinSizeText')) document.getElementById('commRangeMinSizeText').value = '0';
-  document.getElementById('commRangeMinDensity').value = '0';
-  if(document.getElementById('commRangeMinDensityText')) document.getElementById('commRangeMinDensityText').value = '0';
-  document.getElementById('commRangeMinDegree').value = '0';
-  if(document.getElementById('commRangeMinDegreeText')) document.getElementById('commRangeMinDegreeText').value = '0';
-  document.getElementById('commRangeMinConn').value = '0';
-  if(document.getElementById('commRangeMinConnText')) document.getElementById('commRangeMinConnText').value = '0';
-
-  global_data = global_data_unchanged;
-
-  let height = 1200;
-  let width = 1200;
-
-  var positions_spiral;
-  if (flag_community_size == 1)
-    positions_spiral = community_size_data;
-  else if (flag_community_degree == 1)
-    positions_spiral = heighest_degree_data;
-  else if (flag_community_density == 1)
-    positions_spiral = heighest_density_data;
-  else if (flag_community_connections == 1)
-    positions_spiral = number_of_community_connections_data;
-  else
-    positions_spiral = community_size_data;
-
-  var prepare_data = [];
-  var unique_communities = new Set(global_data_unchanged.map(function(d) { return d.community; }));
-  unique_communities.forEach(function(entry) {
-    var comm_data = global_data_unchanged.filter(function(d) { return d.community == entry; });
-    comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
-    prepare_data.push.apply(prepare_data, comm_data);
-  });
-
-  prepare_data = computing_spiral_positions(positions_spiral, prepare_data, optimal_no_of_nodes, height, width);
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data;
-
-  d3.select("#chart").selectAll("svg").remove();
-  var svg = d3.select("#chart");
-  initializeSpiralChart(svg, height, width);
-  draw_spiral_community();
-
-  table.selectAll("tr").remove();
-  show_table_data(global_data);
+  clearCommunityFilters()
 }
 // ============================================================
 // Community View Toggle: Louvain vs Metadata
@@ -1019,10 +732,10 @@ function switchCommunityView(mode) {
   if (!original_community_backup && global_data_unchanged && global_data_unchanged.length > 0) {
     original_community_backup = global_data_unchanged.map(function(d) { return d.community; });
     original_density_backup = global_data_unchanged.map(function(d) { return d.density; });
-    original_community_size_data = community_size_data.slice();
-    original_heighest_degree_data = heighest_degree_data.slice();
-    original_heighest_density_data = heighest_density_data.slice();
-    original_number_of_community_connections_data = number_of_community_connections_data.slice();
+    original_community_size_data = full_community_stats.size.slice();
+    original_heighest_degree_data = full_community_stats.degree.slice();
+    original_heighest_density_data = full_community_stats.density.slice();
+    original_number_of_community_connections_data = full_community_stats.connections.slice();
   }
 
   community_view_mode = mode;
@@ -1030,7 +743,7 @@ function switchCommunityView(mode) {
   if (mode === 'metadata') {
     // Check if nodeFeatureLookup has data
     if (!nodeFeatureLookup || Object.keys(nodeFeatureLookup).length === 0) {
-      alert("No metadata available for this dataset. Node features CSV may not be loaded.");
+      showStatusMessage("Metadata groups are not available for this dataset", "warning");
       community_view_mode = 'louvain';
       return;
     }
@@ -1122,33 +835,22 @@ function switchCommunityView(mode) {
     }
   }
 
-  // Rebuild positions
-  var height = 1200;
-  var width = 1200;
+  turnOffMostConnected();
 
-  var prepare_data = [];
-  var unique_communities_set = new Set(global_data_unchanged.map(function(d) { return d.community; }));
-  unique_communities_set.forEach(function(entry) {
-    var comm_data = global_data_unchanged.filter(function(d) { return d.community == entry; });
-    comm_data.sort(function(a, b) { return d3.descending(a.centrality, b.centrality); });
-    prepare_data.push.apply(prepare_data, comm_data);
-  });
-
-  prepare_data = computing_spiral_positions(community_size_data, prepare_data, optimal_no_of_nodes, height, width);
-  height = Math.max(height, computed_total_community_height || height);
-  global_data = prepare_data;
-
-  d3.select("#chart").selectAll("svg").remove();
-  d3.select("#chart").attr("height", height);
-  var svg = d3.select("#chart");
-  initializeSpiralChart(svg, height, width);
-  draw_spiral_community();
+  // the community filter is cleared: community ids mean something else in the other view
+  full_community_stats = {
+    size: community_size_data.slice(),
+    degree: heighest_degree_data.slice(),
+    density: heighest_density_data.slice(),
+    connections: number_of_community_connections_data.slice()
+  };
+  community_ranking_key = mode === 'metadata' ? 'size' : null;
+  clear_community_filter_inputs();
+  set_active_communities(all_community_ids());
+  show_active_subset();
 
   // Update tooltip
   var numComms = community_size_data.length;
   var modeLabel = mode === 'metadata' ? 'Metadata (' + numComms + ' groups)' : 'Louvain';
   d3.select("#community_ranking_tooltip").html("<b>Community View:</b> " + modeLabel);
-
-  table.selectAll("tr").remove();
-  show_table_data(global_data);
 }

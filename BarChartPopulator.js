@@ -10,6 +10,16 @@ let number_of_community_connections_data
 let nodeFeatureLookup = {}
 let nodeFeatureColumnName = "" // The name of the feature column in node_features.csv
 
+// display name of the metadata column, e.g. cs_field_class -> "CS field"
+var FEATURE_COLUMN_LABELS = { cs_field_class: "CS field", page_type: "Page type" }
+function feature_column_label(){
+  if (!nodeFeatureColumnName) return "Feature"
+  if (FEATURE_COLUMN_LABELS[nodeFeatureColumnName]) return FEATURE_COLUMN_LABELS[nodeFeatureColumnName]
+  var name = nodeFeatureColumnName.replace(/_/g, ' ')
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+let initial_state // snapshot of the page-load view, restored by reset_button()
+
 // Field name mapping — can be overridden per dataset via window.FIELD_NAMES
 // Falls back to showing raw values if no mapping provided
 let FIELD_NAMES = window.FIELD_NAMES || {
@@ -42,7 +52,7 @@ function showdata_count(data){
   data = data.sort(function(a,b){return d3.descending(a.y,b.y)})
   var svg = d3.select("#barchart-no_of_nodes")
   initializeChart(svg),
-  draw(data, "Community", "Number_of_nodes", "Number of nodes in each community");
+  draw(data, "Community", "Size (nodes)", "Size of each community");
 }
 
 //for density barchart
@@ -55,7 +65,7 @@ function showdata_density(data){
   data = data.sort(function(a,b){return d3.descending(a.y,b.y)})
   var svg = d3.select("#barchart-density")
   initializeChart(svg),
-  draw(data, "Community", "Edge_Density", "Density of edges in each community");
+  draw(data, "Community", "Edge density", "Edge density of each community");
 }
 
 //for max degree barchart
@@ -68,7 +78,7 @@ function showdata_hdegree(data){
   data = data.sort(function(a,b){return d3.descending(a.y,b.y)})
   var svg = d3.select("#barchart-h_degree")
   initializeChart(svg),
-  draw(data, "Community", "Max Degree", "Max-Degree in each community");
+  draw(data, "Community", "Max degree", "Max degree in each community");
 }
 
 
@@ -82,7 +92,7 @@ function showdata_connections(data){
   data = data.sort(function(a,b){return d3.descending(a.y,b.y)})
   var svg = d3.select("#heatmap-connectivity")
   initializeChart(svg),
-  draw(data, "Community", "Connections", "Inter-Community connections of communities");
+  draw(data, "Community", "Connections", "Connections to other communities");
 }
 
 //for connection heatmap
@@ -99,11 +109,31 @@ function showdata_connectivity_heatmap(data){
   draw_heatmap(data, "Community", "Community", "Community to community connections");
 }
 
+// redraw the community bar charts for the active communities (pages that have them)
+function redraw_community_charts(){
+  if (!document.getElementById("barchart-no_of_nodes")) return
+  // the bar charts share the g / svg1 globals with the main chart, so keep the main chart's
+  var main_g = g, main_svg1 = svg1
+  d3.selectAll("#barchart-no_of_nodes, #barchart-density, #barchart-h_degree, #heatmap-connectivity").selectAll("*").remove()
+  showdata_count(community_size_data.map(function(d){ return {community: d.community, count: d.size} }))
+  showdata_density(heighest_density_data.map(function(d){ return {community: d.community, density: d.density} }))
+  showdata_hdegree(heighest_degree_data.map(function(d){ return {community: d.community, h_degree: d.degree} }))
+  showdata_connections(number_of_community_connections_data.map(function(d){ return {community: d.community, connections: d.connections} }))
+  g = main_g
+  svg1 = main_svg1
+}
+
 function  show_table_data(data){
   // Get every column value
+  // internal columns are hidden: positions, the CSV index, the full-network degree,
+  // betweenness (not computed, always 0) and the metadata column when there is no metadata
+  var hidden_columns = ["x", "y", "new_x", "new_y", "centrality_full", "Unnamed: 0", "betwness"]
+  if (Object.keys(nodeFeatureLookup).length === 0) hidden_columns.push("cs_field")
+  var column_labels = {node: "Node", community: "Community", centrality: "Degree", closeness: "Closeness",
+                       eign: "Eigenvector", density: "Edge density", cs_field: feature_column_label()}
   var columns = Object.keys(data[0])
   .filter(function(d){
-    return ((d != "x" && d != "y" && d != "new_x" && d != "new_y"));
+    return !hidden_columns.includes(d);
   });
 
   var header = thead.append("tr")
@@ -111,7 +141,7 @@ function  show_table_data(data){
       .data(columns)
       .enter()
       .append("th")
-          .text(function(d){ return d;})
+          .text(function(d){ return column_labels[d] || d;})
           .on("click", function(d, da){
               rows.sort(function(a, b){
                   return b[da] - a[da];
@@ -286,7 +316,37 @@ function showdata_spiral_community_chart(data){
       initializeSpiralChart(svg, height, width);
     }
 
+    // Snapshot the page-load state so reset_button() can restore it exactly.
+    // Ranking buttons re-sort these arrays in place, so keep copies.
+    let node_attrs = {}
+    global_data_unchanged.forEach(function(d){
+      node_attrs[d.node] = {community: d.community, density: d.density}
+    })
+    initial_state = {
+      community_order: center_positions_spiral.slice(),
+      size: community_size_data.slice(),
+      degree: heighest_degree_data.slice(),
+      density: heighest_density_data.slice(),
+      connections: number_of_community_connections_data.slice(),
+      node_attrs: node_attrs,
+      ranking_label: d3.select("#ranking_tooltip").html(),
+      community_ranking_label: d3.select("#community_ranking_tooltip").html()
+    }
+
+    // active dataset (settings.js): every community is active at page load.
+    // centrality_full keeps the whole-network degree; centrality is counted inside the active subset
+    global_data_unchanged.forEach(function(d){ d.centrality_full = d.centrality })
+    full_community_stats = {
+      size: initial_state.size.slice(),
+      degree: initial_state.degree.slice(),
+      density: initial_state.density.slice(),
+      connections: initial_state.connections.slice()
+    }
+    set_active_communities(all_community_ids())
+    layout_data = prepare_data
+
   draw_spiral_community()
+  update_counts()
   /*var brush = d3.brush()
   .on("brush", function(){
     console.log("i am in brush")
@@ -334,6 +394,25 @@ function showdata_spiral_community_chart(data){
 
 DATADIR = window.DATADIR || "./temp_data/"
 
+// Loading overlay: covers the page until the data is drawn (so nothing can be
+// clicked too early), or explains a load failure instead of leaving a blank page
+var loadStartTime = performance.now()
+var loadingOverlay = document.createElement("div")
+loadingOverlay.id = "loading_overlay"
+loadingOverlay.setAttribute("role", "status")
+loadingOverlay.setAttribute("aria-live", "polite")
+loadingOverlay.style.cssText = "position:fixed; top:0; right:0; bottom:0; left:0; z-index:1050; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.9);"
+loadingOverlay.innerHTML = '<div class="text-center"><div class="spinner-border text-secondary" aria-hidden="true"></div><div class="mt-2">Loading data…</div></div>'
+document.body.appendChild(loadingOverlay)
+
+function show_load_error(err){
+  console.error("Data loading failed:", err)
+  loadingOverlay.innerHTML = '<div class="text-center p-4">' +
+    '<div class="fw-bold mb-2">The data for this page could not be loaded.</div>' +
+    '<div class="mb-3">Please tell the study facilitator.</div>' +
+    '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Reload page</button></div>'
+}
+
 // Load node features CSV (optional - may not exist for all datasets)
 var nodeFeaturesCsvPath = window.NODE_FEATURES_CSV || (DATADIR + "node_features.csv");
 var nodeFeaturesPromise = d3.csv(nodeFeaturesCsvPath).catch(function() {
@@ -341,7 +420,7 @@ var nodeFeaturesPromise = d3.csv(nodeFeaturesCsvPath).catch(function() {
   return null;
 });
 
-Promise.all([
+var tableAndChartsLoaded = Promise.all([
   d3.csv(DATADIR+"facebook_data_transformed_new.csv"),
   d3.csv(DATADIR+"commuity_count.csv"),
   d3.csv(DATADIR+"commuity_density.csv"),
@@ -375,12 +454,10 @@ Promise.all([
     console.log("connections OK");
   }
 
-}).catch(err => {
-  console.error("Promise.all failed:", err);
 });
 
 
-Promise.all([
+var mainChartLoaded = Promise.all([
   d3.csv(DATADIR+"facebook_data_transformed_new.csv"),
   d3.csv(DATADIR+"coarse_graph_pos.csv"),
   d3.csv(DATADIR+"link_data.csv"),
@@ -395,3 +472,10 @@ Promise.all([
   d3.csv(DATADIR+"commuity_number_of_connections.csv"),
   nodeFeaturesPromise
   ]).then(showdata_spiral_community_chart)
+
+// remove the overlay once everything is drawn; this is the point to start timing a task
+Promise.all([tableAndChartsLoaded, mainChartLoaded]).then(function(){
+  loadingOverlay.remove()
+  window.dashboardReadyTime = performance.now()
+  console.info("Dashboard ready after " + Math.round(window.dashboardReadyTime - loadStartTime) + " ms")
+}).catch(show_load_error)

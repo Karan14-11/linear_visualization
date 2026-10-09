@@ -51,12 +51,10 @@ var table = d3.select("#table-location")
 function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, eig){
 
   var centrality_data = data.map(function(d){return d.centrality})
-  count =0
-  console.log(data.forEach((d)=>{
-    if (adjacent_nodes.includes(d.node))
-    count = count +1
-
-  }))
+  // intra-community neighbours: same community as the node (adjacent_nodes holds active neighbours only)
+  var active_node_obj = data.find(function(d){ return d.node == activeNode })
+  var node_comm = active_node_community.get(+activeNode)
+  count = adjacent_nodes.filter(function(m){ return active_node_community.get(+m) == node_comm }).length
 
   var margin = {top: 10, right: 30, bottom: 30, left: 40},
       width = 250 - margin.left - margin.right,
@@ -67,7 +65,7 @@ function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, ei
   // Build node feature string conditionally
   var featureHtml = "";
   if (Object.keys(nodeFeatureLookup).length > 0) {
-    var colLabel = nodeFeatureColumnName ? (nodeFeatureColumnName.charAt(0).toUpperCase() + nodeFeatureColumnName.slice(1).replace(/_/g, ' ')) : "Feature";
+    var colLabel = feature_column_label();
     var fieldVal = nodeFeatureLookup.hasOwnProperty(activeNode) ? nodeFeatureLookup[activeNode] : -1;
     // For mapping like CS fields, use FIELD_NAMES if present, else just show the raw value.
     var fieldName = typeof FIELD_NAMES !== 'undefined' && FIELD_NAMES.hasOwnProperty(fieldVal) ? FIELD_NAMES[fieldVal] : (fieldVal === -1 ? "Unknown" : fieldVal);
@@ -79,11 +77,11 @@ function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, ei
 
   // append the svg object to the body of the page
   var svg = d3.select("#node_textbox")
-      .html("<b>Node of interest: </b>"+ activeNode +"<br/>" + featureHtml +"<b>Degree: </b>"+ deg +"<br/>" +"<b>Closeness: </b>"+ clo +"<br/>" + "<b>Betweenness: </b>"+ bet +"<br/>" +"<b>Eigen: </b>"+ eig +"<br/>" + "<br/>"
+      .html("<b>Node: </b>"+ activeNode +"<br/>" + featureHtml +"<b>Degree: </b>"+ deg + degree_label_suffix(active_node_obj) +"<br/>" +"<b>Closeness: </b>"+ clo + full_network_suffix() +"<br/>" +"<b>Eigenvector: </b>"+ eig + full_network_suffix() +"<br/>" + "<br/>"
        + "<b>Total edges:</b> " + adjacent_nodes.length + "<br/>" +
-       "<b>Intra-community node-to-node edges:</b> " + count + "<br/>" +
-       "<b>Inter-community node-to-node edges:</b> " + inter_community_connections + "<br/>" +
-       "<b>List of Adjacent nodes:</b> " + adjacent_nodes+"<br/>"+"<br/>")
+       "<b>Edges within its community:</b> " + count + "<br/>" +
+       "<b>Edges to other communities:</b> " + inter_community_connections + "<br/>" +
+       "<b>Neighbor nodes:</b> " + adjacent_nodes+"<br/>"+"<br/>")
        .style("font-size", "17px")
 
 }
@@ -91,13 +89,14 @@ function draw_textbox(data, adjacent_nodes, activeNode, count, deg, bet, clo, ei
 
 function draw_textbox_community_connections(){
 
-  var output_number_of_inter_community_links = coarse_graph.links.filter(function(d){ if(d.source.id==activeCommunity || d.target.id == activeCommunity)
-  return d})
+  var output_number_of_inter_community_links = coarse_graph.links.filter(function(d){
+    var src = link_end_id(d.source), tgt = link_end_id(d.target)
+    return (src == activeCommunity || tgt == activeCommunity) && active_communities.has(src) && active_communities.has(tgt)
+  })
 
   output_number_of_inter_community_links = output_number_of_inter_community_links.map(d=> ({
-    
-    source : +d.source.id,
-    target : +d.target.id,
+    source : +link_end_id(d.source),
+    target : +link_end_id(d.target),
     weight : +d.WEIGHT
   }))
   
@@ -134,9 +133,9 @@ function draw_textbox_community_connections(){
   // append the svg object to the body of the page
   var svg = d3.select("#community_textbox")
       .html("<b>Community: </b>"+ "<b>"+activeCommunity +"</b>" +
-      "<br/>" +"<b>Number_of_node: </b>"+"<b>"+display_size +"</b>"+
-      "<br/>" +"<b>Edge_density: </b>"+"<b>"+ display_density +"</b>"+
-      "<br/>" + "<br/>" + "<b>Community Connections:</b> "+  "<br/>" )
+      "<br/>" +"<b>Size (nodes): </b>"+"<b>"+display_size +"</b>"+
+      "<br/>" +"<b>Edge density: </b>"+"<b>"+ display_density +"</b>"+
+      "<br/>" + "<br/>" + "<b>Edges between communities:</b> "+  "<br/>" )
        .style("font-size", "18px")
        
       
@@ -208,16 +207,14 @@ function draw_community_feature_barchart(communityId) {
   if (chartHeight > maxHeight) chartHeight = maxHeight;
 
   // Title
-  var featureLabel = nodeFeatureColumnName
-    ? nodeFeatureColumnName.replace(/_/g, ' ')
-    : "Node Type";
+
   d3.select("#community_barchart")
     .append("div")
     .style("font-size", "14px")
     .style("font-weight", "bold")
     .style("margin-bottom", "4px")
     .style("margin-top", "8px")
-    .text(featureLabel.charAt(0).toUpperCase() + featureLabel.slice(1) + " Distribution");
+    .text(feature_column_label() + " distribution");
 
   // Color scale
   var barColors = [
@@ -449,7 +446,7 @@ let count =0;
          }
      }
 
-let adjacent_nodes_find_node = connections_list[find_node_id]
+let adjacent_nodes_find_node = active_neighbours(find_node_id)
 d3.select("#community_spiral").select("svg").remove()
 d3.select("#node_spiral").select("svg").remove()
 d3.select("#community_textbox").html("")
@@ -587,9 +584,44 @@ console.log(adjacent_nodes)
 
 var svg_community
 
+// a coarse-graph link end is an id before the force layout runs, a node object after
+function link_end_id(end){
+  return (end !== null && typeof end === "object") ? end.id : end
+}
+
+// ============================================================
+// Inter-community arcs: an arc diagram in a left margin of the linear view,
+// one arc per pair of connected communities, thickness = edges between them
+// ============================================================
+var ARC_MARGIN = 120               // px reserved left of the community circles
+var ARC_COLOUR = "#9aa0a6"
+var ARC_HIGHLIGHT = "#762a83"      // purple: not used by the node colour scales
+var show_background_arcs = true    // toggled by "Show/hide community links"
+
+function reset_community_arcs(){
+  d3.selectAll(".community_arcs path")
+    .attr("stroke", ARC_COLOUR)
+    .attr("stroke-opacity", show_background_arcs ? 0.25 : 0)
+}
+
+// arcs of `community` stand out; all others fade
+function highlight_community_arcs(community){
+  var touches = function(d){ return d.a == community || d.b == community }
+  d3.selectAll(".community_arcs path")
+    .attr("stroke", function(d){ return touches(d) ? ARC_HIGHLIGHT : ARC_COLOUR })
+    .attr("stroke-opacity", function(d){ return touches(d) ? 0.9 : (show_background_arcs ? 0.05 : 0) })
+    .filter(touches).raise()
+}
+
 // draw spiral in side window on click community
 function draw_coarse_graph_in_side_window( adjacent_nodes, activeNode){
 console.log("inside_coarse")
+// only the active communities and the links between them
+adjacent_nodes = (adjacent_nodes || []).filter(function(c){ return active_communities.has(+c) })
+let active_coarse_nodes = coarse_graph.nodes.filter(function(n){ return active_communities.has(n.id) })
+let active_coarse_links = coarse_graph.links.filter(function(l){
+  return active_communities.has(link_end_id(l.source)) && active_communities.has(link_end_id(l.target))
+})
 let bodyHeight = 200
 let bodyWidth = 400
 var width = 400,
@@ -606,7 +638,7 @@ d3.select("#node_spiral").select("svg").remove()
 
 
   //calcolate scale for edge width
-  temp_data = coarse_graph.links.filter(function(d){if(d.source != d.target) return d})
+  temp_data = active_coarse_links.filter(function(d){if(link_end_id(d.source) != link_end_id(d.target)) return d})
   var max_edge_strength = d3.max(temp_data, function(d){return d.WEIGHT});
   var min_edge_strength = d3.min(temp_data, function(d){return d.WEIGHT});
   
@@ -623,7 +655,7 @@ d3.select("#node_spiral").select("svg").remove()
   let links = svg_community.append("g")
     .attr("class", "community_links")
     .selectAll("line")
-    .data(coarse_graph.links)
+    .data(active_coarse_links)
     .enter()
     .append("line")
     .style('stroke', function(d){    
@@ -643,7 +675,7 @@ d3.select("#node_spiral").select("svg").remove()
   let nodes = svg_community.append("g")
       .attr("class", "community_nodes")
       .selectAll("circle")
-      .data(coarse_graph.nodes)
+      .data(active_coarse_nodes)
       .enter()
       .append("circle")
           .attr("r", 5)
@@ -652,7 +684,7 @@ d3.select("#node_spiral").select("svg").remove()
        })
 
 //labels
-  let lebels = svg_community.append("g").attr("class", "community_text").selectAll("text").data(coarse_graph.nodes).enter().append("text").text(function(d){
+  let lebels = svg_community.append("g").attr("class", "community_text").selectAll("text").data(active_coarse_nodes).enter().append("text").text(function(d){
    // console.log(d)
     return d.id})
 
@@ -720,11 +752,11 @@ d3.select("#node_spiral").select("svg").remove()
       .force("center", d3.forceCenter(bodyWidth / 3, bodyHeight / 2))
   
       simulation
-      .nodes(coarse_graph.nodes)
+      .nodes(active_coarse_nodes)
       .on("tick", updateElements);
 
   simulation.force("link")
-      .links(coarse_graph.links);
+      .links(active_coarse_links);
 
 
 
@@ -904,7 +936,7 @@ function computing_spiral_positions(center_positions_spiral, data_points, sides,
 
   let waveangle = 0.314;
 
-  let initial_x = 60
+  let initial_x = 60 + ARC_MARGIN // the arc margin sits left of the community axis
   let initial_y = 60
   let x_increment = 0
  
@@ -1044,9 +1076,7 @@ function draw_spiral_community(){
 
 
 
-  //find_node_id does not work with most connected node data functonality
-  if (most_connected_nodes_data)
-    find_node_id =-1
+  // Find Node and Most Connected turn each other off in settings.js
   console.log(find_node_id)
 
   g.selectAll(".brush").remove()
@@ -1064,7 +1094,7 @@ function draw_spiral_community(){
                   .domain(yExtent)
                   .range(yExtent)
 
-  let max_density = d3.max(global_data, d=>d.density)
+  let max_density = d3.max(global_data_unchanged, d=>d.density)
 
 
 //define colorscale
@@ -1220,14 +1250,19 @@ console.log(global_data)
 
                                       }
                                       else{
-                                        var csClass = nodeFeatureLookup.hasOwnProperty(d.node) ? nodeFeatureLookup[d.node] : -1;
-                                        var csName = CS_FIELD_NAMES.hasOwnProperty(csClass) ? CS_FIELD_NAMES[csClass] : "Unknown";
+                                        // metadata line: the dataset's own feature column (as in the details panel); none without metadata
+                                        var featureLine = "";
+                                        if (Object.keys(nodeFeatureLookup).length > 0) {
+                                          var colLabel = feature_column_label();
+                                          var fieldVal = nodeFeatureLookup.hasOwnProperty(d.node) ? nodeFeatureLookup[d.node] : -1;
+                                          var fieldName = FIELD_NAMES.hasOwnProperty(fieldVal) ? FIELD_NAMES[fieldVal] : (fieldVal === -1 ? "Unknown" : fieldVal);
+                                          featureLine = "<br/><b>" + colLabel + ":</b> " + fieldName;
+                                        }
                                         div.html("<b>Node:</b> "+ d.node +"<br/>" +"<b>Community:</b> " +d.community+ "<br/>"+
-                                                 "<b>Degree:</b> "+ parseFloat(d.centrality).toFixed(2) +"<br/>"+
-                                                 "<b>Closeness:</b> "+ parseFloat(d.closeness).toFixed(4) +"<br/>"+
-                                                 "<b>Betweenness:</b> "+ parseFloat(d.betwness).toFixed(4) +"<br/>"+
-                                                 "<b>Eigenvector:</b> "+ parseFloat(d.eign).toFixed(4) +"<br/>"+
-                                                 "<b>CS Field:</b> "+ csName )
+                                                 "<b>Degree:</b> "+ d.centrality + degree_label_suffix(d) +"<br/>"+
+                                                 "<b>Closeness:</b> "+ parseFloat(d.closeness).toFixed(4) + full_network_suffix() +"<br/>"+
+                                                 "<b>Eigenvector:</b> "+ parseFloat(d.eign).toFixed(4) + full_network_suffix() +
+                                                 featureLine )
                                         .style("left", (event.pageX) + "px")
                                         .style("top", (event.pageY - 28) + "px")
                                         .style("text-align", "left");
@@ -1243,7 +1278,7 @@ console.log(global_data)
                                           yCoordinateOfActiveNode = d.y
 
                                           //code to show adjacent node
-                                          let adjacent_nodes = connections_list[activeNode]
+                                          let adjacent_nodes = active_neighbours(activeNode)
 
 
 
@@ -1583,7 +1618,7 @@ var legendaxis = d3.axisRight()
     .attr("width", (legendwidth) + "px")
     //.attr("translate", "transform(750, 0)")
     .style("position", "absolute")
-    .style("left", "790px")
+    .style("left", (790 + ARC_MARGIN) + "px")
     .style("top", margin.top)
   
 
@@ -1593,21 +1628,21 @@ var legendaxis = d3.axisRight()
 g
   .append("g")
   .attr("class", "axis")
-  .attr("transform", "translate(800, "+margin.top+")")
+  .attr("transform", "translate(" + (800 + ARC_MARGIN) + ", "+margin.top+")")
   //.attr("transform", "translate(" + (legendwidth - margin.left - margin.right + 3) + "," + (margin.top) + ")")
   .call(legendaxis);
 
   var text_for_legend;
   if (densityColFlag ==1)
-  text_for_legend = "Density";
+  text_for_legend = "Edge density";
   else if (degreeColFlag==1)
   text_for_legend =  "Degree";
   else if (closenessColFlag==1)
   text_for_legend=  "Closeness";
   else if (betweennessColFlag==1)
-  text_for_legend =  "Betweeness";
+  text_for_legend =  "Betweenness";
   else if (eignColFlag==1)
-  text_for_legend = "Eigen";
+  text_for_legend = "Eigenvector";
 
   g
   .append("g")
@@ -1616,7 +1651,7 @@ g
   .text(text_for_legend)
   //.attr("transform", "translate")
   //.attr("class", "axis")
-  .attr("transform", "translate( 770 ," + (legendheight+10) + ")")
+  .attr("transform", "translate(" + (770 + ARC_MARGIN) + " ," + (legendheight+10) + ")")
   //.call(legendaxis);
 
 //g.append
@@ -1629,7 +1664,7 @@ let community_scale = d3.scaleOrdinal()
 let community_axis = d3.axisLeft(community_scale)
 
 g.append("g")
-.attr("transform", "translate(50,0)")
+.attr("transform", "translate(" + (50 + ARC_MARGIN) + ",0)")
 .call(community_axis)
 
 g.append("text")
@@ -1658,8 +1693,11 @@ d3.selectAll("mylinks").remove()
 // Use the computed height from community layout, with a minimum of 700
 let height = Math.max(700, computed_total_community_height || 700)
 let width =1200
+// one community-axis layer only: earlier redraws would otherwise stack copies (and darken the arcs)
+d3.select("#chart").selectAll("svg.community_axis_layer").remove()
 var svg = d3.select("#chart")
   .append("svg")
+    .attr("class", "community_axis_layer")
     .attr("width", width + margin.left + margin.right)
     .attr("height", height + margin.top + margin.bottom)
   .append("g")
@@ -1679,16 +1717,46 @@ var y = d3.scaleOrdinal()
 .range([0, height])
 .domain(allNodes)*/
 
+// inter-community arcs (under the circles): connected pairs of communities on the axis,
+// self-loops and communities hidden by a filter are skipped
+var circle_x = 17 + ARC_MARGIN
+var arc_x = circle_x - 9                      // left edge of the circles
+var arc_data = []
+coarse_graph.links.forEach(function(l){
+  var a = link_end_id(l.source), b = link_end_id(l.target)
+  if (a != b && domain_for_community_legend.includes(a) && domain_for_community_legend.includes(b))
+    arc_data.push({a: a, b: b, weight: +l.WEIGHT})
+})
+var arc_weights = d3.extent(arc_data, function(d){ return d.weight })
+var arc_width = d3.scaleLog().domain(arc_weights[0] === arc_weights[1] ? [1, arc_weights[1] + 1] : arc_weights).range([0.5, 4]).clamp(true)
+svg.append("g")
+  .attr("class", "community_arcs")
+  .style("pointer-events", "none")
+  .selectAll("path")
+  .data(arc_data)
+  .enter()
+  .append("path")
+    .attr("d", function(d){
+      var y1 = Math.min(y(d.a), y(d.b)), y2 = Math.max(y(d.a), y(d.b))
+      var ry = (y2 - y1) / 2
+      var rx = Math.min(ry, ARC_MARGIN - 4)   // long links stay inside the margin
+      // from the upper circle to the lower one, bulging left (sweep 0)
+      return "M" + arc_x + "," + y1 + " A" + rx + "," + ry + " 0 0,0 " + arc_x + "," + y2
+    })
+    .attr("fill", "none")
+    .attr("stroke-width", function(d){ return arc_width(d.weight) })
+reset_community_arcs()
+
 // Add the circle for the nodes
 let coarse_graph_nodes = svg
 .selectAll("mynodes")
 
-.data(coarse_graph.nodes)
+.data(coarse_graph.nodes.filter(function(d){ return domain_for_community_legend.includes(d.id) }))
 .enter()
 .append("g")
 .attr("class", "comm_nodes")
 .append("circle")
-  .attr("cx", 17)
+  .attr("cx", circle_x)
   .attr("cy", function(d){ return(y(d.id))})
   .attr("r", 9)
   .style("fill", "#69b3a2")
@@ -1732,6 +1800,25 @@ coarse_graph_links = svg
     // Add the highlighting functionality
     coarse_graph_nodes.on('mouseover', function (e,d) {
       activeCommunity = d.id
+      highlight_community_arcs(d.id)
+
+      // tooltip with the community's values; with a community filter, connections and
+      // max degree are counted inside the current view (see set_active_communities)
+      var community_value = function(data, key){
+        var row = data.find(function(r){ return r.community == d.id })
+        return row ? row[key] : undefined
+      }
+      var density = community_value(heighest_density_data, "density")
+      var in_view = community_filter_active() ? " (in current view)" : ""
+      div.transition().duration(200).style("opacity", .9)
+      div.html("<b>Community:</b> " + d.id + "<br/>" +
+               "<b>Size (nodes):</b> " + community_value(community_size_data, "size") + "<br/>" +
+               "<b>Edge density:</b> " + (density === undefined ? "–" : d3.format(".4f")(density)) + "<br/>" +
+               "<b>Connections:</b> " + community_value(number_of_community_connections_data, "connections") + in_view + "<br/>" +
+               "<b>Max degree:</b> " + community_value(heighest_degree_data, "degree") + in_view)
+        .style("left", (e.pageX + 12) + "px")
+        .style("top", (e.pageY - 28) + "px")
+        .style("text-align", "left")
       console.log(d)
       adjacent_community = community_connections_list[d.id]
 
@@ -1777,6 +1864,8 @@ coarse_graph_links = svg
         //.style('stroke-width', function (link_d) { return link_d.source === d.id || link_d.target === d.id ? 4 : 1;})
     })
     .on('mouseout', function (d) {
+       reset_community_arcs()
+       div.transition().duration(500).style("opacity", 0)
        d3.selectAll("circle")
         .attr("opacity", 1)
       //nodes.style('fill', "#69b3a2")
